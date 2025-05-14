@@ -1,0 +1,5160 @@
+//+------------------------------------------------------------------+
+//|                                                    EU51_3TD4.mq4 |
+//|                                                        eugene900 |
+//|                                              eugene900@gmail.com |
+//+------------------------------------------------------------------+
+
+
+#property copyright "Copyright 2025, eugene900@gmail.com"
+#property link      "eugene900@gmail.com"
+#property version   "51.03"
+
+//------------------------------------+
+//| Expert initialization function                                   |
+//+------------------------------------------------------------------+
+//dodano zatvaranje naloga vise puta jer server daje delay
+//zatvaranje prvo naloga sa najvecim profitom-ako se okrece trend da se gubi sto manje dok se sve zatvori
+//verzija 50.8 poveava se treiling sa brojem naloga
+// 3TD3 imaosim  davanja naloga izvan zadnjeg naloga dodano i povecanje spacinga suprotnog naloga dakle svaki buy povecava sell spacing i obrnuto
+
+string EA_name= "EU 51_3TD4";
+
+#include <stdlib.mqh>
+#include <stderror.mqh>
+#include <Object.mqh>
+enum TRADE_TYPE
+
+  { 
+  // Auto_Mode =0,
+ // Standard = 1,
+ //  EU_signal = 2,
+ //  Turbo = 3,
+ //  Heiken_Ashi = 4,
+ ////  ZigZag_Mode = 5,
+ //  Limits_Mode = 6,
+ //  Candle_Mode = 7,
+ //  Cretino     = 8,
+//   MA_Mode     = 9,
+ //  Reverse     = 10,
+   Pending_Mode  = 11,
+  };
+string AutoTradeType;
+
+//#define  NL    "\n"//original za klasicni koments
+#define  NL    "|"
+// Regular variables
+extern int MagicNumber                 = 369;
+extern string  Setings                 = "   ";
+
+
+input TRADE_TYPE Trade_Type_ = Pending_Mode;
+
+
+int Trade_Type=Trade_Type_;
+
+extern string  Comon_setings           = " ============ Comon settings =========== ";
+
+
+extern int TrailingStop = 700;      // Trailing stop u pips
+        extern int TrailingStep = 5;       // Minimalni korak za pomicanje trailing stopa
+        extern bool UseTrailingStop = true; // Uključi/isključi trailing stop
+
+// Dodajte ove eksterne inpute na početak vašeg koda, u sekciju za input parametre
+extern bool UseTrailingProfit = false;   // Koristiti trailing profit
+extern double TrailingProfitStep = 10.0; // Korak za trailing profit (u pipsima)
+
+// Dodajte ove globalne varijable
+double GlobalMaxProfit = 0;    // Prati maksimalni ostvareni profit
+double TrailingProfitLevel = 0; // Trenutna razina trailing profita
+double BuyProfit2,SellProfit2;
+
+
+
+ bool     TradeShort             = true;
+ bool     TradeLong              = true;
+ //bool    SplitBuy_SellTrade      = false;
+ double  LotSize                 = 0.01;
+ double  LotIncrement            = 0.1;
+ double     Multiplier             = 0;
+double  CounterTrendMultiplier    = 2.0;
+extern double     ProfitTarget           =0.5;
+
+double ManualProfitTarget                =0.0;
+double ManualProfitTargetSet             =0.0;
+color NoSet = clrBlack;
+color Set = clrGreen;
+color SetBoja;
+color SecureBoja;
+color NoSec =clrBlack;
+color Sec= clrOrange;
+double SecureProfit                      =0.0;
+double SecureProfitSet                   =0.0;
+double trenutniProfit;
+
+double TreilingSecureProfit                      =0.0;
+double TreilingSecureProfitSet                   =0.0;
+color TreilingSecureBoja;
+color NoSetTr =clrBlack;
+color SetTr= clrOrchid;
+
+
+
+
+//double MaxSessionProfit;
+
+color BUYSetBoja;
+color SecureBUYBoja;
+color BUYNoSec =clrBlack;
+color BUYSec= clrBlueViolet;
+double SecureBUYProfit                      =0.0;
+double SecureBUYProfitSet                   =0.0;
+
+
+color SELLSetBoja;
+color SecureSELLBoja;
+color SELLNoSec =clrBlack;
+color SELLSec= clrRed;
+double SecureSELLProfit                      =0.0;
+double SecureSELLProfitSet                   =0.0;
+
+
+extern int     PendingSpacing           = 70;
+extern int   Spacing_Multiplayer         =10;
+extern double  PendingLots             = 0.01;
+//extern int     PendingBostStart        = 3;
+
+extern double  ManualTrade_SL          = 0;
+ bool    Manual_SecureProfit_Treiling          = false;
+
+ bool    RightSideLabel          = true;
+extern int     SessionTarget           = 500; //Trading will be stopped if this amount has been earned in this session
+extern double  MinAccEquity            = 0;  // ako je >0 onda je min acc equity
+extern double  MaxSpread               = 3.0;
+extern int MaximumBuyOrders            = 7;
+extern int MaximumSellOrders           = 7;
+// extern double minPipMovement          = 10;
+
+extern int RangeTimeFrame = PERIOD_M15; // Vremenski okvir za provjeru raspona
+extern double Range = 20; // Raspon u pipsima koji definira "sideways" tržište
+extern bool EnableRangeFilter = true; // Omogućuje uključivanje/isključivanje range filtera
+
+// Globalne varijable za Range funkcionalnost
+double rangeHigh = 0;
+double rangeLow = 0;
+datetime lastRangeUpdate = 0; 
+ 
+ 
+ 
+ 
+// Dodajte ove externe parametre na početku EA
+extern bool UseTimeRestriction = false;       // Koristi vremensko ograničenje
+extern int RestrictStartHour = 18;            // Sat početka ograničenja (0-23)
+extern int RestrictStartMinute = 0;           // Minuta početka ograničenja (0-59)
+extern int RestrictEndHour = 6;               // Sat završetka ograničenja (0-23)
+extern int RestrictEndMinute = 0;             // Minuta završetka ograničenja (0-59)
+ color TimeRestrictionTextColor = Orange;  // Boja teksta za prikaz ograničenja
+ int TimeRestrictionCorner = 3;         // Ugao ekrana za prikaz (0-3)
+ int TimeRestrictionFontSize = 12;      // Veličina fonta
+
+// Globalne varijable za prikaz poruke
+string timeRestrictionLabel = "TimeRestrictionLabel";
+string countdownLabel = "CountdownLabel";
+bool isTimeRestrictionDisplayed = false;
+
+
+extern string Distance=  "-------X && Y distance for group 'Close Orders Button's----------" ;
+extern int    X_dist = 0;
+extern int    Y_dist = 0;
+
+string Distance_ = " -----X && Y distance for group indicator's ---------";
+int  Xin_dist  = 20;
+int  Yin_dist  = 0;
+
+
+extern string BGcolr= "=============Back color for Display===========";
+extern color  FrameColor  = clrBlack;
+
+// string CommentsID             = "comment";
+//+------------------------------------------------------------------+
+
+// Internal settings
+int            Step           = 1;
+int            Error          = 0;
+int            Order          = 0;
+int            Slippage       = 0;
+//int            Reference      = 0;
+string         TradeComment;
+double         TickPrice      = 0;
+
+int            MaxBuys        = 0;
+int            MaxSells       = 0;
+
+bool           Auditing       = false;
+string         Filename;
+double         initialBalance;
+int            lotPrecision;
+int            StopLoss=100;
+bool PriceBUY;
+bool PriceSELL;
+bool dummyResult;
+datetime LastActionTime = 0;
+double max_spread;
+double min_spread;
+bool SpreadStop;
+double  current_spread;
+double  pendingTP               = 0;
+//double  pendingSL              = 0;
+
+double pendingSL   =ManualTrade_SL ;  
+
+double BeginningBalance = 0.0;
+bool    CloseBuys            = false;
+bool    CloseSells           = false;
+bool    CloseBuysInProfit    = false;
+bool    CloseSellsInProfit   = false;
+
+bool value_to_toggle = true;
+bool value_to_toggle2 = false;
+
+bool DisplayComment =false;
+bool ManualButtons=false;
+bool    PendingOrders    =true;
+bool ManualBUY                         = true;
+bool  ManualSELL                        = true;
+double ManualLots                      = 0.01;
+bool CloseHighestBuy1 =false;
+bool CloseLowestBuy1 =false;
+
+bool CloseHighestSell1 =false;
+bool CloseLowestSell1 =false;
+double manualLots=ManualLots;
+double pendingLots=PendingLots ;
+int pendingSpacing=PendingSpacing;
+extern bool     UseRangeMultiplier     = true;    // Enable Range Multiplier
+extern double   RangeMultiplierFactor = 2.0;     // Multiplier for Range zones
+double spacing;
+
+double trendSpacing;
+
+double returnValueC;
+
+double highLowRange;
+int     CloseDelay      = 0;
+bool    CeaseTrading  = false  ;
+bool       PauseTrade  = false;
+bool      StopMinEquity  =false;
+bool      SessionTargetStop= false;
+int     StartTime               = 0; //Example: Trading pause starts at hour 14, minute 30 --> input= 1430
+int     EndTime                 = 0; //Example: Trading pause ends at hour 15, minute 10 --> input= 1510
+
+int     endDayHourMinute        = 0; //Example: Quit trading on day 17 hour 21 minute 59 -->input=172159
+
+         int lastOrderType = -1;
+         double profitThreshold = 0.02;
+         double stopLossThreshold = -0.01;
+         bool initialOrdersPlaced = false;
+         datetime lastCandleTime = 0;
+         int previousBuyOrders = 0;
+         int previousSellOrders = 0;
+         
+double LotsBt;
+double LotsBc;
+//double rsi4 ;
+//double mfi4;
+
+//--------------------inicator profit multichard
+
+//double BeginningBalance = 0.0;
+string symbols[20];
+double tottrades, totlots, totopnl, totcpnl;
+//---dodatni displey za multiprofit
+string symbols2[20];
+double tottrades2, totlots2, totopnl2, totcpnl2;
+int Rows2;
+int t2;
+//multichard indocator position
+int xdist  =110;
+int ydist  =50;
+double MaxOrders = 0.0, MaxLots=0.0,MinFloat =0.0;
+double MaxPrMtch = 0.00;
+int SPACING;
+
+int Rows;
+int t;
+//------------------------bool MultichardDisplay
+bool MultichardDisplay;
+double totalOpen;
+double totalClose;
+
+
+
+   int correction;
+   
+   double profit = 0;
+   double target = 1.0;
+   
+   double profitTemp = 0; // Privremena varijabla za praćenje trenutnog profita
+   double secureProfit = 0; // Početna vrijednost secure profita
+   double lastSecureProfit = 0; // Zadnja povećana vrijednost secure profita
+   bool initialSecureProfitSet = false; // Indikator je li secure profit inicijalno postavljen
+   double TrailingProfitResetReading =0;
+   double   currentProfit=0;
+   int currentPeriod = 0;//za ocitanje tf karte
+   
+ 
+   
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+int init()
+  {
+
+   initialBalance= AccountBalance();
+   TradeComment  = StringConcatenate(Symbol()," ",Period()," ","PM"," S_ID: ",TimeLocal());
+   Filename = StringConcatenate("EU_v40_44_",Symbol(),"_",Period(),"_M",".txt");
+   CalculateLotPrecision();
+
+
+//--multichard indicator
+   DeleteObjects();
+//-------reset nultih naloga
+  initialOrdersPlaced = false;
+   lastOrderType = -1;
+   previousBuyOrders = 0;
+   previousSellOrders = 0;
+   lastCandleTime = 0;
+
+   return(0);
+  }
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+//int deinit()
+//  {
+
+//   return(0);
+//  }
+  
+  // Dodajte ovu funkciju za čišćenje objekata pri zatvaranju EA
+//int OnDeinit(const int reason)
+int deinit()
+{
+   ObjectDelete(timeRestrictionLabel);
+   ObjectDelete(countdownLabel);
+   return(0);
+}
+
+  
+  
+  
+//---------------------------------------------------------------------------------------
+
+void CalculateLotPrecision()
+  {
+   double lotstep=MarketInfo(Symbol(),MODE_LOTSTEP);
+   if(lotstep==1)
+      lotPrecision=0;
+   if(lotstep==0.1)
+      lotPrecision=1;//correction=1;
+   if(lotstep==0.01)
+      lotPrecision=2;correction=1;pendingSpacing=PendingSpacing;//pendingSL*=100;Spacing*=1000;TrendSpacing*=1000;PendingSpacing*=100;
+   if(lotstep==0.001)
+      lotPrecision=3;//correction=100;
+   
+  }
+//+------------------------------------------------------------------+
+//----------------
+void     DeleteObjects()
+  {
+   for(int i=ObjectsTotal()-1; i>-1; i--)
+      if(StringFind(ObjectName(i),"obj")>=0)
+         ObjectDelete(ObjectName(i));
+  }
+
+
+
+//---------------------Zatvaranje naloga po propritetu od najveceg profita na dolje 
+void CloseOrdersOptimizedByProfit() {
+    // Structure to hold order information
+    struct OrderInfo {
+        int ticket;
+        double profit;
+        int type;
+    };
+    
+    // Fixed-size array to store active orders (adjust size as needed)
+    OrderInfo activeOrders[100];
+    int orderCount = 0;
+    
+    // Collect all active orders for this symbol and magic number
+    for(int i = 0; i < OrdersTotal(); i++) {
+        if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
+            if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber) {
+                activeOrders[orderCount].ticket = OrderTicket();
+                activeOrders[orderCount].profit = OrderProfit();
+                activeOrders[orderCount].type = OrderType();
+                orderCount++;
+                
+                // Prevent buffer overflow
+                if(orderCount >= 100) break;
+            }
+        }
+    }
+    
+    // Manual bubble sort to order by profit (descending)
+    for(int j = 0; j < orderCount - 1; j++) {
+        for(int k = 0; k < orderCount - j - 1; k++) {
+            if(activeOrders[k].profit < activeOrders[k+1].profit) {
+                // Swap orders
+                OrderInfo temp = activeOrders[k];
+                activeOrders[k] = activeOrders[k+1];
+                activeOrders[k+1] = temp;
+            }
+        }
+    }
+    
+    // Close orders starting from the most profitable
+    for(int m = 0; m < orderCount; m++) {
+        if(OrderSelect(activeOrders[m].ticket, SELECT_BY_TICKET)) {
+            bool result = false;
+            
+            // Close Buy orders
+            if(activeOrders[m].type == OP_BUY) {
+                result = OrderClose(OrderTicket(), OrderLots(), Bid, 3, Red);
+            }
+            // Close Sell orders
+            else if(activeOrders[m].type == OP_SELL) {
+                result = OrderClose(OrderTicket(), OrderLots(), Ask, 3, Blue);
+            }
+            
+            if(!result) {
+              //  Print("Error closing order ", activeOrders[m].ticket, ": ", GetLastError());
+            }
+        }
+    }
+}
+
+//+------------------------------------------------------------------------+
+
+void CloseALLBuy()
+  {
+// double LastBuyTime;
+
+   for(int i = OrdersTotal()-1; i >=0; i--)
+     {
+      int sel = OrderSelect(i, SELECT_BY_POS);
+      bool result = false;
+      if(OrderSymbol()==Symbol() && OrderMagicNumber() == MagicNumber && OrderType() == OP_BUY)
+        {
+         //  if (OrderOpenTime()>LastBuyTime) LastBuyTime=OrderOpenTime();
+         // if (TimeCurrent()-LastBuyTime >= 0) result = OrderClose( OrderTicket(), OrderLots(), MarketInfo(OrderSymbol(), MODE_BID), 0, clrNONE );
+         result = OrderClose(OrderTicket(), OrderLots(), MarketInfo(OrderSymbol(), MODE_BID), 0, clrNONE);
+        }
+     }
+
+
+  }
+
+//+-----------------------------------------------------+
+//| Closes all Sells this symbol only
+//+-----------------------------------------------------+
+void CloseALLSell()
+  {
+//double LastSellTime;
+
+   for(int i = OrdersTotal()-1; i >=0; i--)
+     {
+      int sel = OrderSelect(i, SELECT_BY_POS);//original
+
+      bool result = false;
+      if(OrderSymbol()==Symbol() && OrderMagicNumber() == MagicNumber && OrderType() == OP_SELL)
+        {
+         // if (OrderOpenTime()>LastSellTime) LastSellTime=OrderOpenTime();
+         //if (TimeCurrent()-LastSellTime >= 0) result = OrderClose( OrderTicket(), OrderLots(), MarketInfo(OrderSymbol(), MODE_ASK), 0, clrNONE );
+         result = OrderClose(OrderTicket(), OrderLots(), MarketInfo(OrderSymbol(), MODE_ASK), 0, clrNONE);
+        }
+     }
+
+
+  }
+
+
+
+//****************************************************************
+
+//-------------------------------------za manual orders
+//+------------------------------------------------------------------------+
+//| cancels all pending orders and closes open positions                   |
+//+------------------------------------------------------------------------+
+void CloseAllThisSymbolBuy()
+  {
+   double LastBuyTime;
+
+   for(int i = OrdersTotal()-1; i >=0; i--)
+     {
+      int sel = OrderSelect(i, SELECT_BY_POS);
+      bool result = false;
+      if(OrderSymbol()==Symbol() && OrderMagicNumber() == MagicNumber && OrderType() == OP_BUY)
+        {
+         if(OrderOpenTime()>LastBuyTime)
+            LastBuyTime=OrderOpenTime();
+         if(TimeCurrent()-LastBuyTime >= 0)
+            result = OrderClose(OrderTicket(), OrderLots(), MarketInfo(OrderSymbol(), MODE_BID), 0, clrNONE);
+        }
+     }
+ //  Sleep(500);
+   return;
+  }
+
+//+-----------------------------------------------------+
+//| Closes all Sells this symbol only
+//+-----------------------------------------------------+
+void CloseAllThisSymbolSell()
+  {
+   double LastSellTime;
+
+   for(int i = OrdersTotal()-1; i >=0; i--)
+     {
+      int sel = OrderSelect(i, SELECT_BY_POS);//original
+
+      bool result = false;
+      if(OrderSymbol()==Symbol() && OrderMagicNumber() == MagicNumber && OrderType() == OP_SELL)
+        {
+         if(OrderOpenTime()>LastSellTime)
+            LastSellTime=OrderOpenTime();
+         if(TimeCurrent()-LastSellTime >= 0)
+            result = OrderClose(OrderTicket(), OrderLots(), MarketInfo(OrderSymbol(), MODE_ASK), 0, clrNONE);
+        }
+     }
+ //  Sleep(500);
+   return;
+  }
+
+
+
+//****************************************************************
+
+
+
+//-----------------
+void CloseBuysInProfit()
+  {
+   double BuyProfit;
+
+   RefreshRates();
+
+   for(Order = OrdersTotal() - 1; Order >= 0; Order--)
+     {
+      if(OrderSelect(Order, SELECT_BY_POS, MODE_TRADES))
+        {
+         if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber && OrderType() == OP_BUY)
+           {
+            BuyProfit = OrderProfit() + OrderSwap() + OrderCommission();
+            if((TimeCurrent()-OrderOpenTime()>=CloseDelay) && BuyProfit > 0)
+               dummyResult=OrderClose(OrderTicket(), OrderLots(), OrderClosePrice(), Slippage, Green);//IsTesting() ||
+
+            Error = GetLastError();
+            if(Error != 0)
+               Write("Error closing BUY order " + OrderTicket() + ": " + ErrorDescription(Error) + " (A" + Error + ")  Lots:" + OrderLots() + "  Bid:" + MarketInfo(OrderSymbol(), MODE_BID));
+           }
+        }
+     }
+ //  Sleep(500);
+   return;
+  }
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void CloseSellsInProfit()
+  {
+   double SellProfit;//, LastSellTime;
+
+   RefreshRates();
+
+   for(Order = OrdersTotal() - 1; Order >= 0; Order--)
+     {
+      if(OrderSelect(Order, SELECT_BY_POS, MODE_TRADES))
+        {
+         if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber && OrderType() == OP_SELL)
+           {
+            SellProfit = OrderProfit() + OrderSwap() + OrderCommission();
+            if(TimeCurrent()-OrderOpenTime()>=CloseDelay && SellProfit > 0)
+               dummyResult=OrderClose(OrderTicket(), OrderLots(), OrderClosePrice(), Slippage, Red);
+
+            Error = GetLastError();
+            if(Error != 0)
+               Write("Error closing SELL order " + OrderTicket() + ": " + ErrorDescription(Error) + " (B" + Error + ")  Lots:" + OrderLots() + "  Ask:" + MarketInfo(OrderSymbol(), MODE_ASK));
+           }
+        }
+     }
+ //  Sleep(500);
+   return;
+  }
+//---------------------
+
+//|                                                                  |
+//+------------------------------------------------------------------+
+
+//*******************************************************************
+void ClosePendingBuyStop()
+  {
+
+
+   RefreshRates();
+
+   for(Order=OrdersTotal()-1; Order>=0; Order--)
+     {
+      if(OrderSelect(Order,SELECT_BY_POS,MODE_TRADES))
+        {
+         if(OrderSymbol()==Symbol() && OrderMagicNumber()==MagicNumber && OrderType()==OP_BUYSTOP)
+           {
+
+            if((TimeCurrent()-OrderOpenTime()>=0))
+               dummyResult=OrderDelete(OrderTicket(),clrNONE);//IsTesting() ||
+
+            Error=GetLastError();
+            if(Error!=0)
+               Write("Error closing SELL order "+OrderTicket()+": "+ErrorDescription(Error)+" (B"+Error+")  Lots:"+OrderLots()+"  Ask:"+MarketInfo(OrderSymbol(),MODE_ASK));
+           }
+        }
+     }
+   return;
+
+  }
+//+------------------------------------------------------------------+
+
+//*******************************************************************
+void ClosePendingSellStop()
+  {
+
+
+   RefreshRates();
+
+   for(Order=OrdersTotal()-1; Order>=0; Order--)
+     {
+      if(OrderSelect(Order,SELECT_BY_POS,MODE_TRADES))
+        {
+         if(OrderSymbol()==Symbol() && OrderMagicNumber()==MagicNumber && OrderType()==OP_SELLSTOP)
+           {
+
+            if((TimeCurrent()-OrderOpenTime()>=0))
+               dummyResult=OrderDelete(OrderTicket(),clrNONE);//IsTesting() ||
+
+            Error=GetLastError();
+            if(Error!=0)
+               Write("Error closing SELL order "+OrderTicket()+": "+ErrorDescription(Error)+" (B"+Error+")  Lots:"+OrderLots()+"  BID:"+MarketInfo(OrderSymbol(),MODE_BID));
+           }
+        }
+     }
+   return;
+
+  }
+
+//*******************************************************************
+void ClosePendingBuyLimit()
+  {
+   RefreshRates();
+
+   for(Order=OrdersTotal()-1; Order>=0; Order--)
+     {
+      if(OrderSelect(Order,SELECT_BY_POS,MODE_TRADES))
+        {
+         if(OrderSymbol()==Symbol() && OrderMagicNumber()==MagicNumber && OrderType()==OP_BUYLIMIT)
+           {
+
+            if((TimeCurrent()-OrderOpenTime()>=0))
+               dummyResult=OrderDelete(OrderTicket(),clrNONE);//IsTesting() ||
+
+            Error=GetLastError();
+            if(Error!=0)
+               Write("Error closing SELL order "+OrderTicket()+": "+ErrorDescription(Error)+" (B"+Error+")  Lots:"+OrderLots()+"  Ask:"+MarketInfo(OrderSymbol(),MODE_ASK));
+           }
+        }
+     }
+   return;
+  }
+//+------------------------------------------------------------------+
+//*******************************************************************
+void ClosePendingSellLimit()
+  {
+   RefreshRates();
+
+   for(Order=OrdersTotal()-1; Order>=0; Order--)
+     {
+      if(OrderSelect(Order,SELECT_BY_POS,MODE_TRADES))
+        {
+         if(OrderSymbol()==Symbol() && OrderMagicNumber()==MagicNumber && OrderType()==OP_SELLLIMIT)
+           {
+            if((TimeCurrent()-OrderOpenTime()>=0))
+               dummyResult=OrderDelete(OrderTicket(),clrNONE);//IsTesting() ||
+
+            Error=GetLastError();
+            if(Error!=0)
+               Write("Error closing SELL order "+OrderTicket()+": "+ErrorDescription(Error)+" (B"+Error+")  Lots:"+OrderLots()+"  BID:"+MarketInfo(OrderSymbol(),MODE_BID));
+           }
+        }
+     }
+   return;
+  }
+
+
+ void ManualBuyLimit()
+        {
+         int es;
+         if(pendingSL>0)
+           {
+            double bbSL= (Ask-PendingSpacing*Point-pendingSL*Point);
+           }
+         else
+            bbSL=0;
+         if(pendingTP>0)
+           {
+            double bbTP =(Ask-PendingSpacing*Point+pendingTP*Point);
+           }
+         else
+            bbTP=0;
+         es=OrderSend(Symbol(), OP_BUYLIMIT,PendingLots, Ask-PendingSpacing*Point, 3,bbSL,bbTP, "", MagicNumber, 0, Blue);
+        }
+      //--
+//*******************************************************************
+ //manual_lots=manualLots;
+//+------------------------------------------------------------------+
+
+
+//*************************sl u pips
+void PlaceManualBuyOrder(double lot_Size, double stop_loss)
+{
+   double BuyOrders;
+   double LowestBuy = 100000, HighestBuy;
+
+   TickPrice = 0;
+
+   RefreshRates();
+
+   for(Order = OrdersTotal() - 1; Order >= 0; Order--)
+   {
+      if(OrderSelect(Order, SELECT_BY_POS, MODE_TRADES))
+      {
+         if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber && OrderType() == OP_BUY)
+         {
+            if(OrderOpenPrice() < LowestBuy)
+               LowestBuy = OrderOpenPrice();
+            if(OrderOpenPrice() > HighestBuy)
+               HighestBuy = OrderOpenPrice();
+            BuyOrders++;
+         }
+      }
+   }
+
+   if(IsTradeAllowed() == true && (BuyOrders < MaximumBuyOrders))
+   {
+      double stoploss = 0;
+      if(stop_loss != 0)
+         stoploss = Ask-(stop_loss * Point)*correction; // Convert stop loss from pips to price*100 jer je na 5 decimala
+
+      int ticket = OrderSend(Symbol(), OP_BUY, lot_Size, Ask, Slippage, stoploss,0, TradeComment, MagicNumber, 0, Blue);
+      Sleep(500);
+      if(ticket > 0 && (stoploss > 0))
+         dummyResult = OrderModify(ticket, OrderOpenPrice(), 0, stoploss, 0, Blue); // Modify stop loss
+
+   }
+
+   Error = GetLastError();
+   if(Error != 0)
+      Write("Error opening BUY order: " + ErrorDescription(Error) + " (C" + Error + ")  Ask:" + Ask + "  Slippage:" + Slippage);
+   else
+   {
+      TickPrice = Close[0];
+   }
+}
+
+//+------------------------------------------------------------------+
+void PlaceManualSellOrder(double lot_Size,double stop_loss)
+  {
+   double  SellOrders;
+   double HighestSell,LowestSell=100000;
+// int ticket=0;//dodano zbog sl
+   TickPrice=0;
+
+   RefreshRates();
+
+   for(Order=OrdersTotal()-1; Order>=0; Order--)
+     {
+      if(OrderSelect(Order,SELECT_BY_POS,MODE_TRADES))
+        {
+         if(OrderSymbol()==Symbol() && OrderMagicNumber()==MagicNumber && OrderType()==OP_SELL)
+           {
+            if(OrderOpenPrice()>HighestSell)
+               HighestSell = OrderOpenPrice();
+            if(OrderOpenPrice() < LowestSell)
+               LowestSell = OrderOpenPrice();
+            SellOrders++;
+           }
+        }
+     }
+
+  
+  
+
+   if(IsTradeAllowed()==true && (SellOrders<MaximumSellOrders))
+     {
+      ///dummyResult=OrderSend(Symbol(),OP_SELL,Lots,Bid,Slippage,0,0,TradeComment,MagicNumber,clrNONE);//Red
+   double stoploss = 0;
+   if(stop_loss != 0)
+       stoploss = Bid + (ManualTrade_SL * Point)*correction; 
+  
+     int ticket=OrderSend(Symbol(), OP_SELL, lot_Size, Bid, Slippage, stoploss, 0,TradeComment,MagicNumber,0, Red);
+      Sleep(500);
+      if(ticket>0 && (stoploss>0 )) dummyResult=OrderModify(ticket,OrderOpenPrice(),stoploss,0,0,Blue);
+   
+   
+      
+      
+      
+      
+     }
+   Error=GetLastError();
+   if(Error!=0)
+      Write("Error opening SELL order: "+ErrorDescription(Error)+" (D"+Error+")  Bid:"+Bid+"  Slippage:"+Slippage);
+   else
+     {
+      TickPrice=Close[0];
+     }
+  }
+//------------
+
+
+
+//--------------------------------------
+//*********************************
+void PlacePendingBuyStop() {
+    double bSL = (pendingSL > 0) ? (Ask + PendingSpacing * Point - pendingSL * Point) : 0;
+    double bTP = (pendingTP > 0) ? (Ask + PendingSpacing * Point + pendingTP * Point) : 0;
+
+    int bes = OrderSend(Symbol(), OP_BUYSTOP, LotSize, Ask + PendingSpacing * Point, 3, bSL, bTP, "", MagicNumber, clrNONE);
+}
+
+void PlacePendingSellStop() {
+    double sSL = (pendingSL > 0) ? (Bid - PendingSpacing * Point + pendingSL * Point) : 0;
+    double sTP = (pendingTP > 0) ? (Bid - PendingSpacing * Point - pendingTP * Point) : 0;
+
+    int res = OrderSend(Symbol(), OP_SELLSTOP, LotSize, Bid - PendingSpacing * Point, 3, sSL, sTP, "", MagicNumber, clrNONE);
+}
+
+void PlacePendingBuyLimit() {
+    double bSL = (pendingSL > 0) ? (Ask - PendingSpacing * Point - pendingSL * Point) : 0;
+    double bTP = (pendingTP > 0) ? (Ask - PendingSpacing * Point + pendingTP * Point) : 0;
+
+    int res = OrderSend(Symbol(), OP_BUYLIMIT, LotSize, Ask - PendingSpacing * 2 * Point, 3, bSL, bTP, "", MagicNumber, 0, clrNONE);
+}
+
+void PlacePendingSellLimit() {
+    double sSL = (pendingSL > 0) ? (Bid + PendingSpacing * Point + pendingSL * Point) : 0;
+    double sTP = (pendingTP > 0) ? (Bid + PendingSpacing * Point - pendingTP * Point) : 0;
+
+    int res = OrderSend(Symbol(), OP_SELLLIMIT, LotSize, Bid + PendingSpacing * 2 * Point, 3, sSL, sTP, "", MagicNumber, 0, clrNONE);
+}
+
+//****************************
+
+   
+
+
+
+
+//------------
+int start()
+  {
+ // while (!IsStopped()) {
+  
+   double         MarginPercent;
+   static double  LowMarginPercent = 10000000, LowEquity = 10000000;
+   double         BuyPipTarget, SellPipTarget;
+   int            SellOrders, BuyOrders;
+   double         BuyLots, SellLots;
+   double         LowestBuy = 99999, HighestBuy = 0.00001, LowestSell = 99999, HighestSell = 0.00001, HighPoint, MidPoint, LowPoint;
+   double         Profit = 0, BuyProfit = 0, SellProfit = 0, PosBuyProfit = 0, PosSellProfit = 0;
+   int            HighestBuyTicket, LowestBuyTicket, HighestSellTicket, LowestSellTicket;
+   double         HighestBuyProfit, LowestBuyProfit, HighestSellProfit, LowestSellProfit;
+// bool           SELLme ;
+//  bool           BUYme ;
+   double         Margin = MarketInfo(Symbol(), MODE_MARGINREQUIRED);
+   string         Message;
+   int            OPSellStop=0, OPBuyStop=0,OPSellLimit=0, OPBuyLimit=0;
+   bool           emergencyMode11=false;
+
+   for(Order = OrdersTotal() - 1; Order >= 0; Order--)
+     {
+      if(OrderSelect(Order, SELECT_BY_POS, MODE_TRADES))
+        {
+         if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber)
+           {
+
+            Profit = OrderProfit() + OrderSwap() + OrderCommission();
+
+            if(OrderType() == OP_BUY)
+              {
+               if(OrderOpenPrice() >= HighestBuy)
+                 {
+                  HighestBuy = OrderOpenPrice();
+                  HighestBuyTicket = OrderTicket();
+                  HighestBuyProfit = Profit;
+                 }
+
+               if(OrderOpenPrice() <= LowestBuy)
+                 {
+                  LowestBuy = OrderOpenPrice();
+                  LowestBuyTicket = OrderTicket();
+                  LowestBuyProfit = Profit;
+                 }
+
+               BuyOrders++;
+               if(BuyOrders > MaxBuys)
+                  MaxBuys = BuyOrders;
+               BuyLots += OrderLots();
+
+               BuyProfit += Profit;
+               if(Profit > 0)
+                  PosBuyProfit += Profit;
+              }
+            //---------------------------------------
+            if(OrderType() == OP_SELLSTOP)
+               OPSellStop++;
+            if(OrderType() == OP_SELLLIMIT)
+               OPSellLimit++;
+            if(OrderType() == OP_BUYSTOP)
+               OPBuyStop++;
+            if(OrderType() == OP_BUYLIMIT)
+               OPBuyLimit++;
+            //----------------------------------------
+            if(OrderType() == OP_SELL)
+              {
+               if(OrderOpenPrice() <= LowestSell)
+                 {
+                  LowestSell = OrderOpenPrice();
+                  LowestSellTicket = OrderTicket();
+                  LowestSellProfit = Profit;
+                 }
+
+               if(OrderOpenPrice() >= HighestSell)
+                 {
+                  HighestSell = OrderOpenPrice();
+                  HighestSellTicket = OrderTicket();
+                  HighestSellProfit = Profit;
+                 }
+
+               SellOrders++;
+               if(SellOrders > MaxSells)
+                  MaxSells = SellOrders;
+               SellLots += OrderLots();
+
+               SellProfit += Profit;
+               if(Profit > 0)
+                  PosSellProfit += Profit;
+              }
+           }
+        }
+     }
+
+ BuyProfit2=BuyProfit;
+ SellProfit2=SellProfit;
+   BuyPipTarget = ProfitTarget;
+   SellPipTarget = ProfitTarget;
+
+   if(HighestBuy >= HighestSell)
+      HighPoint = HighestBuy;
+   else
+      HighPoint = HighestSell;
+
+   if(LowestBuy <= LowestSell)
+      LowPoint = LowestBuy;
+   else
+      LowPoint = LowestSell;
+
+   MidPoint = (HighPoint + LowPoint) / 2;
+
+//   if ((SellOrders > 1 && BuyOrders > 0) || (SellOrders > 0 && BuyOrders > 1)) MidPoint = (HighPoint + LowPoint) / 2;
+
+   RefreshRates();
+//----------------------------------//--------ssad sve zaa manual butone
+//---------------------------------------
+//Manual Close Options
+
+   if(CloseBuys)
+      CloseAllThisSymbolBuy();
+   if(CloseSells)
+      CloseAllThisSymbolSell();
+   if(CloseBuysInProfit)
+      CloseBuysInProfit();
+   if(CloseSellsInProfit)
+      CloseSellsInProfit();
+//---------------------------------------
+//Manual Close Options
+
+   if(CloseBuys)
+      CloseAllThisSymbolBuy();
+   if(CloseSells)
+      CloseAllThisSymbolSell();
+   if(CloseBuysInProfit)
+      CloseBuysInProfit();
+   if(CloseSellsInProfit)
+      CloseSellsInProfit();
+
+//-- float
+   static double LowestFloat=0;
+   static double HighestFloat=0;
+   double Float = BuyProfit+SellProfit;
+   if(Float < LowestFloat)
+     {
+      LowestFloat = Float;
+     }
+   if(Float> HighestFloat)
+     {
+      HighestFloat = Float;
+     }
+//**********************************************
+   color bojaON,bojaOFF;
+   color DisplayBoja;
+   bojaON=Green;
+   bojaOFF=Black;
+   DisplayBoja=bojaOFF;
+
+   string txt;
+
+   if(value_to_toggle==0)//1
+     {
+      DisplayBoja=bojaON;
+      DisplayComment=true;
+      txt="Auto";
+      ManualButtons=true;
+      CeaseTrading=true;
+      if(StringFind(_Symbol,"CloseMultichard"))
+         ObjectDelete(_Symbol,"CloseMultichard");//gasenje buttona close all multichard orders
+      //PendingOrders=false;
+
+      //--Multichard display remove
+      DeleteObjects();
+      //--ponistenje dugmeta za multichard display on /off kada je aktivan manualtrade
+      if(StringFind(_Symbol,"Alarm"))
+         ObjectDelete(_Symbol,"Alarm");
+      //--reset nultih naloga
+        initialOrdersPlaced = false;
+   lastOrderType = -1;
+   previousBuyOrders = 0;
+   previousSellOrders = 0;
+   lastCandleTime = 0;
+      //--
+     }
+   else
+      if(value_to_toggle==1)//0
+        {
+         DisplayBoja=bojaOFF;
+         DisplayComment=false;
+         txt="Manual";
+         ManualButtons=false;
+         CeaseTrading=false;
+         PendingOrders=true;
+         //button close all multichard orders
+         // CreateButton("CloseMultichard",3,180,160,80,25,Red,White,"CLOSE.All.CHARDS");
+         if(MultichardDisplay==true)
+           {
+            CreateButton("CloseMultichard",4,130,325,50,22,Red,White,"CLOSE. SymbolOrders All.CHARDS");
+            //mowe background label for multichard profit indicator
+
+            FrameLB0(4,130,70,325,50+Rows*25);
+           }
+         //--
+         if(StringFind(_Symbol,"BuyButton"))
+            ObjectDelete(_Symbol,"BuyButton");
+         if(StringFind(_Symbol,"SellButton"))
+            ObjectDelete(_Symbol,"SellButton");
+         if(StringFind(_Symbol,"UP"))
+            ObjectDelete(_Symbol,"UP");
+         if(StringFind(_Symbol,"DOWN"))
+            ObjectDelete(_Symbol,"DOWN");
+         if(StringFind(_Symbol,"CloseSellInProfit"))
+            ObjectDelete(_Symbol,"CloseSellInProfit");
+         if(StringFind(_Symbol,"CloseSellAll"))
+            ObjectDelete(_Symbol,"CloseSellAll");
+         if(StringFind(_Symbol,"CloseBuyProfit"))
+            ObjectDelete(_Symbol,"CloseBuyProfit");
+         if(StringFind(_Symbol,"CloseBuyAll"))
+            ObjectDelete(_Symbol,"CloseBuyAll");
+         if(StringFind(_Symbol,"CloseHighestBuy"))
+            ObjectDelete(_Symbol,"CloseHighestBuy");
+         if(StringFind(_Symbol,"CloseLowestBuy"))
+            ObjectDelete(_Symbol,"CloseLowestBuy");
+         if(StringFind(_Symbol,"CloseLowestSell"))
+            ObjectDelete(_Symbol,"CloseLowestSell");
+         if(StringFind(_Symbol,"CloseHighestSell"))
+            ObjectDelete(_Symbol,"CloseHighestSell");
+         if(StringFind(_Symbol,"CloseALLSymbolsALLChard"))
+            ObjectDelete(_Symbol,"CloseALLSymbolsALLChard");
+
+         //--manual profit target
+         if(StringFind(_Symbol,"AutoProfitTarget"))
+            ObjectDelete(_Symbol,"AutoProfitTarget");
+         if(StringFind(_Symbol,"ProfitTarget"))
+            ObjectDelete(_Symbol,"ProfitTarget");
+         if(StringFind(_Symbol,"ProfitTargetLots+"))
+            ObjectDelete(_Symbol,"ProfitTargetLots+");
+         if(StringFind(_Symbol,"ProfitTargetLots-"))
+            ObjectDelete(_Symbol,"ProfitTargetLots-");
+         if(StringFind(_Symbol,"ProfitTargetLots1+"))
+            ObjectDelete(_Symbol,"ProfitTargetLots1+");
+         if(StringFind(_Symbol,"ProfitTargetLots1-"))
+            ObjectDelete(_Symbol,"ProfitTargetLots1-");
+         if(StringFind(_Symbol,"ProfitTargetReset"))
+            ObjectDelete(_Symbol,"ProfitTargetReset");
+         if(StringFind(_Symbol,"ProfitTargetUP"))
+            ObjectDelete(_Symbol,"ProfitTargetUP");
+         if(StringFind(_Symbol,"ProfitTargetDOWN"))
+            ObjectDelete(_Symbol,"ProfitTargetDOWN");
+         //--SecureProft
+         if(StringFind(_Symbol,"SecureProfit"))
+            ObjectDelete(_Symbol,"SecureProfit");
+         if(StringFind(_Symbol,"SecureProfitLots+"))
+            ObjectDelete(_Symbol,"SecureProfitLots+");
+         if(StringFind(_Symbol,"SecureProfitLots-"))
+            ObjectDelete(_Symbol,"SecureProfitLots-");
+         if(StringFind(_Symbol,"SecureProfitLots1+"))
+            ObjectDelete(_Symbol,"SecureProfitLots1+");
+         if(StringFind(_Symbol,"SecureProfitLots1-"))
+            ObjectDelete(_Symbol,"SecureProfitLots1-");
+         if(StringFind(_Symbol,"SecureProfitReset"))
+            ObjectDelete(_Symbol,"SecureProfitReset");
+         if(StringFind(_Symbol,"SecureProfitUP"))
+            ObjectDelete(_Symbol,"SecureProfitUP");
+         if(StringFind(_Symbol,"SecureProfitDOWN"))
+            ObjectDelete(_Symbol,"SecureProfitDOWN");
+            
+         //--SecureTrailingProft
+         
+ 
+         
+         if(StringFind(_Symbol,"TreilingSecureProfit"))
+            ObjectDelete(_Symbol,"TreilingSecureProfit");
+         if(StringFind(_Symbol,"TreilingSecureProfit+"))
+            ObjectDelete(_Symbol,"TreilingSecureProfit+");
+         if(StringFind(_Symbol,"TreilingSecureProfit-"))
+            ObjectDelete(_Symbol,"TreilingSecureProfit-");
+         if(StringFind(_Symbol,"TreilingSecureProfit1+"))
+            ObjectDelete(_Symbol,"TreilingSecureProfit1+");
+         if(StringFind(_Symbol,"TreilingSecureProfit1-"))
+            ObjectDelete(_Symbol,"TreilingSecureProfit1-");
+         if(StringFind(_Symbol,"TreilingSecureProfitReset"))
+            ObjectDelete(_Symbol,"TreilingSecureProfitReset");
+         if(StringFind(_Symbol,"TreilingSecureProfitUP"))
+            ObjectDelete(_Symbol,"TreilingSecureProfitUP");
+         if(StringFind(_Symbol,"TreilingSecureProfitDOWN"))
+            ObjectDelete(_Symbol,"TreilingSecureProfitDOWN");
+//-----------------------------------------------
+         if(StringFind(_Symbol,"SecureBUYProfit"))
+            ObjectDelete(_Symbol,"SecureBUYProfit");
+         if(StringFind(_Symbol,"SecureBUYProfitLots+"))
+            ObjectDelete(_Symbol,"SecureBUYProfitLots+");
+         if(StringFind(_Symbol,"SecureBUYProfitLots-"))
+            ObjectDelete(_Symbol,"SecureBUYProfitLots-");
+         if(StringFind(_Symbol,"SecureBUYProfitLots1+"))
+            ObjectDelete(_Symbol,"SecureBUYProfitLots1+");
+         if(StringFind(_Symbol,"SecureBUYProfitLots1-"))
+            ObjectDelete(_Symbol,"SecureBUYProfitLots1-");
+         if(StringFind(_Symbol,"SecureBUYProfitReset"))
+            ObjectDelete(_Symbol,"SecureBUYProfitReset");
+         if(StringFind(_Symbol,"SecureBUYProfitUP"))
+            ObjectDelete(_Symbol,"SecureBUYProfitUP");
+         if(StringFind(_Symbol,"SecureBUYProfitDOWN"))
+            ObjectDelete(_Symbol,"SecureBUYProfitDOWN");
+
+         if(StringFind(_Symbol,"SecureSELLProfit"))
+            ObjectDelete(_Symbol,"SecureSELLProfit");
+         if(StringFind(_Symbol,"SecureSELLProfitLots+"))
+            ObjectDelete(_Symbol,"SecureSELLProfitLots+");
+         if(StringFind(_Symbol,"SecureSELLProfitLots-"))
+            ObjectDelete(_Symbol,"SecureSELLProfitLots-");
+         if(StringFind(_Symbol,"SecureSELLProfitLots1+"))
+            ObjectDelete(_Symbol,"SecureSELLProfitLots1+");
+         if(StringFind(_Symbol,"SecureSELLProfitLots1-"))
+            ObjectDelete(_Symbol,"SecureSELLProfitLots1-");
+         if(StringFind(_Symbol,"SecureSELLProfitReset"))
+            ObjectDelete(_Symbol,"SecureSELLProfitReset");
+         if(StringFind(_Symbol,"SecureSELLProfitUP"))
+            ObjectDelete(_Symbol,"SecureSELLProfitUP");
+         if(StringFind(_Symbol,"SecureSELLProfitDOWN"))
+            ObjectDelete(_Symbol,"SecureSELLProfitDOWN");
+
+         //--pending
+         if(StringFind(_Symbol,"BuyStop"))
+            ObjectDelete(_Symbol,"BuyStop");
+         if(StringFind(_Symbol,"BuyLimit"))
+            ObjectDelete(_Symbol,"BuyLimit");
+         if(StringFind(_Symbol,"SellStop"))
+            ObjectDelete(_Symbol,"SellStop");
+         if(StringFind(_Symbol,"SellLimit"))
+            ObjectDelete(_Symbol,"SellLimit");
+         if(StringFind(_Symbol,"PendingSpacing"))
+            ObjectDelete(_Symbol,"PendingSpacing");
+         if(StringFind(_Symbol,"PendingLots+"))
+            ObjectDelete(_Symbol,"PendingLots+");
+         if(StringFind(_Symbol,"PendingLots-"))
+            ObjectDelete(_Symbol,"PendingLots-");
+         if(StringFind(_Symbol,"Spacing+"))
+            ObjectDelete(_Symbol,"Spacing+");
+         if(StringFind(_Symbol,"Spacing-"))
+            ObjectDelete(_Symbol,"Spacing-");
+         if(StringFind(_Symbol,"PendingClose"))
+            ObjectDelete(_Symbol,"PendingClose");
+         if(StringFind(_Symbol,"ManualLots+"))
+            ObjectDelete(_Symbol,"ManualLots+");
+         if(StringFind(_Symbol,"ManualLots-"))
+            ObjectDelete(_Symbol,"ManualLots-");
+         if(StringFind(_Symbol,"Reset"))
+            ObjectDelete(_Symbol,"Reset");
+         //indikators display
+         if((ObjectFind("LabelRsi")==0)||
+            (ObjectFind("LabelMfi")==0)||
+            (ObjectFind("LabelAdx")==0)||
+            (ObjectFind("LabelADx")==0)||
+            (ObjectFind("LabelTma")==0)||
+            (ObjectFind("LabelPdi")==0)||
+            (ObjectFind("LabelPDI")==0)||
+            (ObjectFind("LabelTMA")==0)||
+            (ObjectFind("LabelADX")==0)||
+            (ObjectFind("LabelMFI")==0)||
+            (ObjectFind("LabelRSI")==0)
+           )
+           {
+            ObjectDelete("LabelRsi");
+            ObjectDelete("LabelMfi");
+            ObjectDelete("LabelAdx");
+            ObjectDelete("LabelADx");
+            ObjectDelete("LabelTma");
+            ObjectDelete("LabelPdi");
+            ObjectDelete("LabelPDI");
+            ObjectDelete("LabelTMA");
+            ObjectDelete("LabelADX");
+            ObjectDelete("LabelMFI");
+            ObjectDelete("LabelRSI");
+           }
+         //strelice buy sell
+         if(StringFind(_Symbol,"pmk_BuyArrow"))
+            ObjectDelete(_Symbol,"pmk_BuyArrow");
+         if(StringFind(_Symbol,"pmk_SellArrow"))
+            ObjectDelete(_Symbol,"pmk_SellArrow");
+        }
+
+//--manual/auto trade button
+
+   CreateButton("Display",1,120,90,15,20,DisplayBoja,White,"."+txt+"");
+
+//------Alarm button------------------
+   color bojaAlON,bojaAlOFF;
+   color AlDisplayBoja;
+   bojaAlON=Green;
+   bojaAlOFF=Red;
+   AlDisplayBoja=bojaAlOFF;
+
+   string Altxt;
+
+   if(value_to_toggle2==0)//1
+      //if (value_to_toggle2==1)//0
+     {
+      AlDisplayBoja=bojaAlOFF;
+      Altxt="Multi.Display";//ManualButtons=true;
+      MultichardDisplay=false;
+      //ponistenje multichard orders displeya
+      DeleteObjects();
+      //ponistenje dugmeta za close all multichard orders
+      CreateButton("CloseMultichard",0,0,0,0,0,Red,White,"CLOSE. SymbolOrders All.CHARDS");
+      //ponistenje background labela za multichard display
+      FrameLB0(0,0,0,0,0);
+
+
+
+
+
+      // CeaseTrading=false;
+      // RefreshRates();
+     }
+   else
+      if(value_to_toggle2==1)//0
+         //else if(value_to_toggle2==0)//1
+        {
+         AlDisplayBoja=bojaAlON;
+         Altxt="Multi.Display";//ManualButtons=false;
+         MultichardDisplay=true;
+         //CeaseTrading=false;PendingOrders=true;
+
+        }
+   if(ManualButtons==false)
+     {
+      CreateButton("Alarm",1,120,90,40,20,AlDisplayBoja,White,"."+Altxt+"");
+     }
+//--
+
+//----------------------------------
+   if(ManualButtons ==true)
+     {
+      //-----------------------------Manual Buton
+      CreateButton2("CloseALLSymbolsALLChard",3,765,365,150,20,Red,Yellow,">>>>>!! CLOSE ALL SYMBOLS ALL CHARDS !!<<<<<");
+
+
+      if(ManualBUY==true)
+        {
+
+         CreateButton("BuyButton",2,120,100,30,20,Blue,White,"ManualBuy");
+
+
+         //--close  buy in profit
+         CreateButton2("CloseBuyProfit",3,765,170,30,20,Blue,White,"Close BuyInProfit");
+         //--close  all buy
+         //CreateButton2("CloseBuyAll",3,765,170,60,20,Blue,White,"Close AllBuy");
+         CreateButton2("CloseBuyAll",3,765,170,60,20,clrDarkBlue,clrGreenYellow,"Close AllBuy");
+         //----closeHighestBuy
+         CreateButton2("CloseHighestBuy",3,765,170,120,20,Blue,White,"Close HighestBuy");
+         //----closeLowestBuy
+         CreateButton2("CloseLowestBuy",3,765,170,90,20,Blue,White,"Close LowestBuy");
+
+
+        }
+      if(ManualBUY==false)
+        {
+         ObjectDelete(_Symbol,"BuyButton");
+         ObjectDelete(_Symbol,"CloseBuyProfit");
+         ObjectDelete(_Symbol,"CloseBuyAll");
+        };
+      RefreshRates();
+      //------------------------------------------------
+      ///-------Manual Sell Button------------------
+      //--------------------------------------------------
+      if(ManualSELL==true)
+        {
+         CreateButton("SellButton",2,230,100,30,20,Red,White,"ManualSell");
+
+
+         //--close sells in profit
+         CreateButton2("CloseSellInProfit",3,570,170,30,20,Red,White,"Close SellInProfit");
+
+         //--close all sells
+         //CreateButton2("CloseSellAll",3,570,170,60,20,Red,White,"Close AllSell");
+         CreateButton2("CloseSellAll",3,570,170,60,20,clrDarkRed,clrGreenYellow,"Close AllSell");
+         //--close Highest sells
+         CreateButton2("CloseHighestSell",3,570,170,120,20,Red,White,"Close HighestSell");
+
+         //--close Lowest sells
+         CreateButton2("CloseLowestSell",3,570,170,90,20,Red,White,"Close LowestSell");
+
+
+
+        }
+      RefreshRates();
+      if(ManualSELL==false)
+        {
+         ObjectDelete(_Symbol,"SellButton");
+         ObjectDelete(_Symbol,"CloseSellButton");
+         ObjectDelete(_Symbol,"CloseSellAll");
+        };
+      RefreshRates();
+      if(ManualBUY==true || ManualSELL==true)
+        {
+         CreateButton("ManualLots+",2,365,35,30,20,Blue,White,"+0.1 ");
+         //--
+         CreateButton("ManualLots-",2,565,35,30,20,Red,White,"- 0.1 ");
+         //--
+         CreateButton("Reset",2,395,170,30,20,Black,Yellow,"Reset       Lots = "+ManualLots +"");
+
+         //-- input manual lots from chard
+
+         CreateButton("UP",2,340,15,36,15,Blue,White,"+");
+         //--
+         CreateButton("DOWN",2,340,15,19,15,Red,White,"-");
+
+        }
+      //----------------------------------------
+      RefreshRates();
+      //----------------------------------------
+      //------------------------------------------------PENDING ORDERS manual BUTTONS--------------------------
+       double PendingReading;
+    //  if( lotPrecision==2){PendingReading=PendingSpacing /100;}
+     //  else {PendingReading=PendingSpacing;}
+       PendingReading=PendingSpacing;
+      //--
+      CreateButton("BuyStop",3,120,90,400,20,Blue,White,"BuyStop");
+      //--
+      CreateButton("SellLimit",3,120,90,370,20,Red,White,"SellLimit");
+      //--
+      CreateButton("SellStop",3,120,90,170,20,Red,White,"SellStop");
+      //--
+      CreateButton("BuyLimit",3,120,90,140,20,Blue,White,"BuyLimit");
+      //----
+      CreateButton("PendingSpacing",3,150,120,270,20,Orange,Blue,"Spacing"+PendingReading +"");
+      //--
+      CreateButton("PendingLots+",3,120,90,300,20,Blue,White,"Lots+ "+PendingLots +"");
+      //--
+      CreateButton("PendingLots-",3,120,90,240,20,Red,White,"Lots- "+PendingLots +"");
+      //--
+      CreateButton("Spacing+",3,25,20,270,20,Orange,Blue,"+");
+      //--
+      CreateButton("Spacing-",3,175,20,270,20,Orange,Red,"-");
+      //--
+      CreateButton("PendingClose",3,135,120,460,40,Red,White,"PendingCLOSE");
+      
+      
+      //-------------------------------------------------------------------
+      //--------------------------manual auto Profit Target----------------
+      //-------------------------------------------------------------------
+      if(ManualProfitTargetSet >0)
+        {SetBoja=Set;}
+      else
+        {SetBoja=NoSet;}
+
+      CreateButton("ProfitTarget",2,116,160,80,20,Green,White,"SetProfitTarget");
+      CreateButton("ProfitTargetLots+",2,320,35,80,20,Blue,White,"+ 1 ");
+      CreateButton("ProfitTargetLots-",2,606,35,80,20,Red,White,"- 1 ");
+      CreateButton("ProfitTargetLots1+",2,359,35,80,20,Blue,White,"+ 10 ");
+      CreateButton("ProfitTargetLots1-",2,567,35,80,20,Red,White,"- 10 ");
+
+      CreateButton("ProfitTargetReset",2,395,170,80,20,SetBoja,Yellow," Reset     Target = "+ManualProfitTarget +"");
+      CreateButton("ProfitTargetUP",2,281,35,78,20,Blue,White,"+0.1");
+      CreateButton("ProfitTargetDOWN",2,645,35,80,20,Red,White,"-0.1");
+      //--manual auto close profit set
+
+
+      double static MaxSessionProfit=trenutniProfit;
+
+
+      if(trenutniProfit>MaxSessionProfit)
+        {MaxSessionProfit=trenutniProfit;}
+
+      if(ManualProfitTargetSet>0 && (BuyProfit+SellProfit>=ManualProfitTargetSet))
+        {
+         CloseAllThisSymbolBuy();
+         CloseAllThisSymbolSell();
+         ClosePendingBuyLimit();
+         ClosePendingBuyStop();
+         ClosePendingSellLimit();
+         ClosePendingSellStop();
+        }
+     //-------------------------------------------------------------------------------------------
+      //------------------------------------------------------------------
+      //--------------------SECURE PROFIT total---------------------------
+      //------------------------------------------------------------------
+
+
+      CreateButton("SecureProfit",2,116,160,105,20,Orange,Blue,"SecureProfit");
+      CreateButton("SecureProfitLots+",2,320,35,105,20,Blue,White,"+ 1 ");
+      CreateButton("SecureProfitLots-",2,606,35,105,20,Red,White,"- 1 ");
+      CreateButton("SecureProfitLots1+",2,359,35,105,20,Blue,White,"+ 10 ");
+      CreateButton("SecureProfitLots1-",2,567,35,105,20,Red,White,"- 10 ");
+
+      CreateButton("SecureProfitReset",2,395,170,105,20,SecureBoja,Yellow," Reset     Secure = "+SecureProfit +"");
+      CreateButton("SecureProfitUP",2,281,35,105,20,Blue,White,"+0.1");
+      CreateButton("SecureProfitDOWN",2,645,35,105,20,Red,White,"-0.1");
+      if(SecureProfitSet>0 &&(BuyProfit+SellProfit<=SecureProfitSet))
+        {
+         CloseAllThisSymbolBuy();
+         CloseAllThisSymbolSell();
+         ClosePendingBuyLimit();
+         ClosePendingBuyStop();
+         ClosePendingSellLimit();
+         ClosePendingSellStop();
+        }
+
+      if(SecureProfitSet >0)
+        {SecureBoja=Sec;}
+      else
+        {SecureBoja=NoSec;}
+
+      if((BuyOrders>0&&SellOrders>0&&SecureProfit>0&&(BuyProfit+SellProfit)<SecureProfit)||
+         (BuyOrders>0&&SellOrders==0&&PosBuyProfit<SecureProfit)||
+         (BuyOrders==0&&SellOrders>0&&PosSellProfit<SecureProfit)||
+         (BuyOrders==0&&SellOrders==0&&SecureProfit>0))
+        { SecureProfit=0; SecureProfitSet=0; SecureBoja=NoSec;}
+     
+      //---------------------------------------------------
+      //-------Manual SECURE BUY PROFIT--------------------
+      //---------------------------------------------------
+      // double Spread = MarketInfo(Symbol(), MODE_SPREAD);
+
+
+
+      CreateButton("SecureBUYProfit",2,116,160,165,20,Blue,Yellow,"SecureBUYProfit");
+      CreateButton("SecureBUYProfitLots+",2,320,35,165,20,Blue,White,"+ 1 ");
+      CreateButton("SecureBUYProfitLots-",2,606,35,165,20,Red,White,"- 1 ");
+      CreateButton("SecureBUYProfitLots1+",2,359,35,165,20,Blue,White,"+ 10 ");
+      CreateButton("SecureBUYProfitLots1-",2,567,35,165,20,Red,White,"- 10 ");
+
+      CreateButton("SecureBUYProfitReset",2,395,170,165,20,SecureBUYBoja,Yellow," Reset     Secure = "+SecureBUYProfit +"");
+      CreateButton("SecureBUYProfitUP",2,281,35,165,20,Blue,White,"+0.1");
+      CreateButton("SecureBUYProfitDOWN",2,645,35,165,20,Red,White,"-0.1");
+
+      if(SecureBUYProfitSet>0  &&PosBuyProfit>0&& (PosBuyProfit<=SecureBUYProfitSet))
+        {CloseBuysInProfit(); }
+
+      if(SecureBUYProfitSet >0)
+        {SecureBUYBoja=BUYSec;}
+      else
+        {SecureBUYBoja=BUYNoSec;}
+
+      if((BuyOrders==0&&SecureBUYProfitSet>0)||
+         (BuyOrders>0&&SecureBUYProfitSet>0&&PosBuyProfit<SecureBUYProfitSet))
+        {SecureBUYProfit=0; SecureBUYProfitSet=0; SecureBUYBoja=BUYNoSec;}
+
+      //-------Manual SECURE SELL PROFIT
+ //Write2("pmk_1116Linija",2,110,98," -------------------------------------------------------- ""  "" ",22,"Vedana",clrWhiteSmoke);
+ //Write2("pmk_1117Linija",2,110,103," -------------------------------------------------------- ""  "" ",22,"Vedana",clrWhiteSmoke);
+      CreateButton("SecureSELLProfit",2,116,160,140,20,Red,Yellow,"SecureSELLProfit");
+      CreateButton("SecureSELLProfitLots+",2,320,35,141,20,Blue,White,"+ 1 ");
+      CreateButton("SecureSELLProfitLots-",2,606,35,141,20,Red,White,"- 1 ");
+      CreateButton("SecureSELLProfitLots1+",2,359,35,141,20,Blue,White,"+ 10 ");
+      CreateButton("SecureSELLProfitLots1-",2,567,35,141,20,Red,White,"- 10 ");
+
+      CreateButton("SecureSELLProfitReset",2,395,170,141,20,SecureSELLBoja,Yellow," Reset     Secure = "+SecureSELLProfit +"");
+      CreateButton("SecureSELLProfitUP",2,281,35,141,20,Blue,White,"+0.1");
+      CreateButton("SecureSELLProfitDOWN",2,645,35,141,20,Red,White,"-0.1");
+
+
+      if(SecureSELLProfitSet>0   &&PosSellProfit>0&&(PosSellProfit<=SecureSELLProfitSet))
+        {CloseSellsInProfit();  }
+
+
+      if(SecureSELLProfitSet >0)
+        {SecureSELLBoja=SELLSec;}
+      else
+        {SecureSELLBoja=SELLNoSec;}
+      if((SellOrders==0&&SecureSELLProfitSet>0)||
+         (SellOrders>0&&PosSellProfit<SecureSELLProfitSet))
+        {SecureSELLProfit=0; SecureSELLProfitSet=0; SecureSELLBoja=SELLNoSec;}
+
+
+      RefreshRates();
+     }//if manual Buttons==true
+//----------------------------------------
+//----Auto Profit target close
+//----------------------------------------
+ 
+              {emergencyMode11=true;}
+
+
+
+
+
+//-------------------------------------------------end zig zag close orders-----------------------------------------------
+//--------------------------manual buttons
+//--------------------------------------------------------------------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------MANUAL CLOSE HIGHEST BUY HIGHEST SELL LOWEST BUY LOWEST SELL
+//---------------------------------------------------------------------------------------------------------------------------------------------------------
+   if(ManualButtons==true)
+     {
+      if(CloseHighestBuy1)
+        {
+
+         dummyResult = OrderSelect(HighestBuyTicket, SELECT_BY_TICKET);
+
+         Error = GetLastError();
+         if(Error != 0)
+            Write("Error accessing BUY order " + HighestBuyTicket + ": " + ErrorDescription(Error) + " (M" + Error + ")");
+
+         if(TimeCurrent()-OrderOpenTime()>=0 && IsTradeAllowed())
+           {
+            dummyResult =  OrderClose(OrderTicket(), OrderLots(), OrderClosePrice(), Slippage, Green);
+           }
+
+         Error = GetLastError();
+         if(Error != 0)
+            Write("Error closing BUY order " + OrderTicket() + ": " + ErrorDescription(Error) + " (N" + Error + ")  Lots:" + OrderLots() + "  Bid:" + MarketInfo(OrderSymbol(), MODE_BID));
+
+
+        }
+
+      //-----
+      if(CloseHighestBuy1)
+        {
+         dummyResult = OrderSelect(HighestBuyTicket, SELECT_BY_TICKET);
+
+         Error = GetLastError();
+         if(Error != 0)
+            Write("Error accessing BUY order " + HighestBuyTicket + ": " + ErrorDescription(Error) + " (O" + Error + ")");
+
+         if(TimeCurrent()-OrderOpenTime()>=0 && IsTradeAllowed()==true)
+           {
+            dummyResult =   OrderClose(OrderTicket(), OrderLots(), OrderClosePrice(), Slippage, Green);
+           }
+
+         Error = GetLastError();
+         if(Error != 0)
+            Write("Error closing BUY order " + OrderTicket() + ": " + ErrorDescription(Error) + " (P" + Error + ")  Lots:" + OrderLots() + "  Bid:" + MarketInfo(OrderSymbol(), MODE_BID));
+         CloseHighestBuy1=false;
+        }
+      //----
+      if(CloseLowestBuy1)
+        {
+         dummyResult = OrderSelect(LowestBuyTicket, SELECT_BY_TICKET);
+
+         Error = GetLastError();
+         if(Error != 0)
+            Write("Error accessing BUY order " + LowestBuyTicket + ": " + ErrorDescription(Error) + " (K" + Error + ")");
+
+         if(TimeCurrent()-OrderOpenTime()>=0 && IsTradeAllowed())
+           {
+            dummyResult = OrderClose(OrderTicket(), OrderLots(), OrderClosePrice(), Slippage, Green);
+           }
+
+         Error = GetLastError();
+         if(Error != 0)
+            Write("Error closing BUY order " + OrderTicket() + ": " + ErrorDescription(Error) + " (L" + Error + ")  Lots:" + OrderLots() + "  Bid:" + MarketInfo(OrderSymbol(), MODE_BID));
+         CloseLowestBuy1=false;
+        }
+
+      //--
+      if(CloseLowestSell1)
+        {
+         dummyResult =  OrderSelect(LowestSellTicket, SELECT_BY_TICKET);
+
+         Error = GetLastError();
+         if(Error != 0)
+            Write("Error accessing SELL order " + LowestSellTicket + ": " + ErrorDescription(Error) + " (G" + Error + ")");
+
+         if(TimeCurrent()-OrderOpenTime()>=0 && IsTradeAllowed()==true)
+           {
+            dummyResult =    OrderClose(OrderTicket(), OrderLots(), OrderClosePrice(), Slippage, Red);
+           }
+
+         Error = GetLastError();
+         if(Error != 0)
+            Write("Error closing SELL order " + OrderTicket() + ": " + ErrorDescription(Error) + " (H" + Error + ")  Lots:" + OrderLots() + "  Ask:" + MarketInfo(OrderSymbol(), MODE_ASK));
+         CloseLowestSell1=false;
+        }
+      //--
+      if(CloseHighestSell1)
+        {
+         dummyResult=OrderSelect(HighestSellTicket, SELECT_BY_TICKET);
+
+         Error = GetLastError();
+         if(Error != 0)
+            Write("Error accessing SELL order " + HighestSellTicket + ": " + ErrorDescription(Error) + " (S" + Error + ")");
+
+         if(TimeCurrent()-OrderOpenTime()>=0 && IsTradeAllowed()==true)
+           {
+            dummyResult=  OrderClose(OrderTicket(), OrderLots(), OrderClosePrice(), Slippage, Red);
+           }
+
+         Error = GetLastError();
+         if(Error != 0)
+            Write("Error closing SELL order " + OrderTicket() + ": " + ErrorDescription(Error) + " (T" + Error + ")  Lots:" + OrderLots() + "  Ask:" + MarketInfo(OrderSymbol(), MODE_ASK));
+         CloseHighestSell1=false;
+        }
+     
+     }//if manual buttons==true
+//---------------------------------------kraj man buttons
+
+//---------------------------------auto spacing
+//------------------------------------------------------------------
+//*******************
+//-----------------------
+//------------order logic
+//-----------------------
+
+
+   if(SpreadStop==false)
+     {
+      current_spread=(SymbolInfoDouble(Symbol(),SYMBOL_ASK)-SymbolInfoDouble(Symbol(),SYMBOL_BID))/Point*0.1;
+     }
+   if(current_spread > max_spread)
+     {
+      max_spread = current_spread;
+     }
+   if(current_spread< min_spread)
+     {
+      min_spread = current_spread;
+     }
+   if(min_spread==0)
+     {
+      min_spread=current_spread;
+     }
+   if(current_spread>=MaxSpread)
+     {
+      // CeaseTrading=true;
+      SpreadStop=true;
+     }
+
+//+-------------------------------Minimum AccEquity stop -----------------------------------+
+
+
+//***************************************
+//   Dynamic Minimum Equity Protection   *
+//***************************************
+static double minAccEquity = 0;
+static double peakEquity = 0;
+static double initialDiff = 0;
+static bool initialized = false;
+static double lastMinAccEquity = 0;  // Za praćenje promjena
+double Equity = AccountEquity();
+
+// Provjera promjene MinAccEquity
+if(lastMinAccEquity != MinAccEquity)
+{
+    initialized = false;  // Force reinitialization
+    peakEquity = 0;      // Reset peak
+    lastMinAccEquity = MinAccEquity;
+  //  Print("MinAccEquity changed from ", lastMinAccEquity, " to ", MinAccEquity);
+}
+
+//Print("Start check - Equity:", Equity, " MinAccEquity setting:", MinAccEquity);
+
+if(MinAccEquity > 0)
+{
+    // Prva inicijalizacija ili nakon promjene MinAccEquity
+    if(!initialized || peakEquity == 0)
+    {
+        peakEquity = Equity;
+        initialDiff = Equity - MinAccEquity;
+        minAccEquity = MinAccEquity;
+        initialized = true;
+     //   Print("INITIALIZATION - Peak:", peakEquity, " minAccEquity:", minAccEquity, " Diff:", initialDiff);
+    }
+    
+    // Ažuriranje peak-a i minAccEquity
+    if(Equity > peakEquity)
+    {
+        peakEquity = Equity;
+        minAccEquity = peakEquity - initialDiff;
+     //   Print("NEW PEAK - Peak:", peakEquity, " Updated minAccEquity:", minAccEquity);
+    }
+    
+ //   Print("STATUS - Current Equity:", Equity, " Current minAccEquity:", minAccEquity, " Peak:", peakEquity);
+    
+    // Provjera za zatvaranje
+    if(Equity <= minAccEquity)
+    {
+       // Print("CLOSING POSITIONS - Equity below minimum!");
+        CloseAllThisSymbolBuy();
+        CloseAllThisSymbolSell();
+        ClosePendingBuyLimit();
+        ClosePendingSellLimit();
+        ClosePendingBuyStop ();
+        ClosePendingSellStop ();
+        StopMinEquity = true;
+        
+        if(ObjectFind("LabelMinEQ") < 0)
+        {
+            CreateLabel("LabelMinEQ", CORNER_RIGHT_UPPER, 200, 100, 
+                       "STOP by MIN ACC EQUITY: " + DoubleToString(minAccEquity, 2) + " $", 
+                       20, clrRed);
+        }
+    }
+}
+
+// Reset stop flaga
+if(StopMinEquity && Equity > minAccEquity)
+{
+    StopMinEquity = false;
+    ObjectDelete("LabelMinEQ");
+  //  Print("Reset StopMinEquity flag");
+}
+
+//************ Label Display
+if(MinAccEquity > 0)
+{
+    color c13;
+    static double StartEquty = AccountBalance();
+    
+    // Reset StartEquty kada se promijeni MinAccEquity
+    if(!initialized)
+    {
+        StartEquty = AccountBalance();
+    }
+    
+    if(minAccEquity > StartEquty) {c13 = Lime;} else {c13 = Red;}
+    
+    ObjectDelete("pmk__AccMinimum");
+    if(ObjectFind("pmk__AccMinimum") != 0)
+    {
+        ObjectCreate("pmk__AccMinimum", OBJ_LABEL, 0, 0, 0);
+        ObjectSet("pmk__AccMinimum", OBJPROP_CORNER, 3);
+        ObjectSet("pmk__AccMinimum", OBJPROP_XDISTANCE, 10);
+        ObjectSet("pmk__AccMinimum", OBJPROP_YDISTANCE, 80);
+        ObjectSetText("pmk__AccMinimum", "" + "ActMinBalance" + " " + DoubleToStr(minAccEquity, 2) + "  ", 12, "Arial", c13);
+    }
+}
+
+//-- Cleanup when MinAccEquity is 0
+if(MinAccEquity == 0)
+{
+    if(ObjectFind("pmk__AccMinimum") == 0)
+    {
+        ObjectDelete("pmk__AccMinimum");
+    }
+    if(ObjectFind("LabelMinEQ") == 0)
+    {
+        ObjectDelete("LabelMinEQ");
+    }
+    initialized = false;  // Reset initialization for next time
+    peakEquity = 0;      // Reset peak
+}
+
+
+//------------------------------------
+
+
+
+
+
+
+
+
+ if(ManualButtons==false)
+    {
+    
+    
+
+    
+    
+    
+    
+//--------------------------------------------------------------------------------------------
+//-----------------SWITCH--------TRADE ------TYPE---------------------------------------------
+//--------------------------------------------------------------------------------------------
+/*
+switch (Trade_Type) {
+    case 11:
+        Trade_Type = 11;
+        double pending_ProfitTarget = ProfitTarget;
+        
+        double totalProfit = BuyProfit + SellProfit;
+        double lastOrderProfit = 0;
+        int lastTicket = 0;
+        
+        // Variables to track price movement
+        static double lastBuyPrice = 0;
+        static double lastSellPrice = 0;
+        
+        // Variables to track highest buy and lowest sell prices
+        static double highestBuyOrderPrice = 0;
+        static double lowestSellOrderPrice = 0;
+        
+        // Variables for dynamic spacing - now separated for buy and sell
+        static int currentBuySpacing = PendingSpacing;
+        static int currentSellSpacing = PendingSpacing;
+        
+        // Provjera vremenskog ograničenja
+        bool timeRestricted = IsTimeRestricted();
+        bool hasOpenOrders = HasOpenOrders();
+        
+        // Ažuriraj prikaz poruke o ograničenju
+        ManageTimeRestrictionDisplay(timeRestricted, hasOpenOrders);
+        
+        // Ako je vrijeme ograničeno i nema otvorenih naloga, ne otvaraj nove
+        bool allowNewOrders = !(timeRestricted && !hasOpenOrders);
+        
+        // Provjera je li tržište u sideways stanju
+        bool isSideways = IsSidewaysMarket();
+       
+        // Crtanje Range zone na grafikonu
+        DrawRangeZone();
+        
+        // Varijable za granice sideways zone
+        double upperRangeZone = 0;
+        double lowerRangeZone = 0;
+        
+        // Dohvati granice sideways zone
+        if (isSideways) {
+            if(GlobalVariableCheck("RangeHigh")) {
+                upperRangeZone = GlobalVariableGet("RangeHigh");
+            }
+            if(GlobalVariableCheck("RangeLow")) {
+                lowerRangeZone = GlobalVariableGet("RangeLow");
+            }
+            
+            if(upperRangeZone == 0 || lowerRangeZone == 0) {
+                for(int obj = ObjectsTotal() - 1; obj >= 0; obj--) {
+                    string objName = ObjectName(obj);
+                    if(StringFind(objName, "RangeHigh") >= 0 && ObjectType(objName) == OBJ_HLINE) {
+                        upperRangeZone = ObjectGet(objName, OBJPROP_PRICE1);
+                    }
+                    else if(StringFind(objName, "RangeLow") >= 0 && ObjectType(objName) == OBJ_HLINE) {
+                        lowerRangeZone = ObjectGet(objName, OBJPROP_PRICE1);
+                    }
+                }
+            }
+            
+            if(upperRangeZone == 0 || lowerRangeZone == 0) {
+                upperRangeZone = iHigh(Symbol(), RangeTimeFrame, iHighest(Symbol(), RangeTimeFrame, MODE_HIGH, 20, 0));
+                lowerRangeZone = iLow(Symbol(), RangeTimeFrame, iLowest(Symbol(), RangeTimeFrame, MODE_LOW, 20, 0));  
+                
+                upperRangeZone += 5 * Point;
+                lowerRangeZone -= 5 * Point;
+            }
+            
+        }
+        
+        // Check for triggered orders and adjust spacing accordingly
+        for(int m = OrdersHistoryTotal()-1; m >= 0; m--) {
+            if(OrderSelect(m, SELECT_BY_POS, MODE_HISTORY)) {
+                if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber && OrderCloseTime() > LastActionTime) {
+                    // If a buy stop was triggered (converted to buy)
+                    if(OrderType() == OP_BUY && OrderComment() == "Follow") {
+                        currentSellSpacing += 10; // Increase sell spacing when buy order is activated
+                        Print("Buy order activated - Sell spacing increased to ", currentSellSpacing);
+                    }
+                    // If a sell stop was triggered (converted to sell)
+                    else if(OrderType() == OP_SELL && OrderComment() == "Follow") {
+                        currentBuySpacing += 10; // Increase buy spacing when sell order is activated
+                        Print("Sell order activated - Buy spacing increased to ", currentBuySpacing);
+                    }
+                }
+            }
+        }
+        
+        // Find highest buy and lowest sell order prices
+        highestBuyOrderPrice = 0;
+        lowestSellOrderPrice = 0;
+        
+        for(int s = 0; s < OrdersTotal(); s++) {
+            if(OrderSelect(s, SELECT_BY_POS, MODE_TRADES)) {
+                if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber) {
+                    if(OrderType() == OP_BUY || OrderType() == OP_BUYSTOP) {
+                        double orderPrice = OrderType() == OP_BUY ? OrderOpenPrice() : OrderOpenPrice();
+                        if(orderPrice > highestBuyOrderPrice || highestBuyOrderPrice == 0) {
+                            highestBuyOrderPrice = orderPrice;
+                        }
+                    }
+                    else if(OrderType() == OP_SELL || OrderType() == OP_SELLSTOP) {
+                       orderPrice = OrderType() == OP_SELL ? OrderOpenPrice() : OrderOpenPrice();
+                        if(orderPrice < lowestSellOrderPrice || lowestSellOrderPrice == 0) {
+                            lowestSellOrderPrice = orderPrice;
+                        }
+                    }
+                    
+                    if(OrderTicket() > lastTicket) {
+                        lastTicket = OrderTicket();
+                        lastOrderProfit = OrderProfit();
+                        
+                        if(OrderType() == OP_BUY || OrderType() == OP_BUYSTOP) {
+                            lastOrderType = 0;
+                            if(OrderType() == OP_BUY) {
+                                lastBuyPrice = OrderOpenPrice();
+                            }
+                        } 
+                        else if(OrderType() == OP_SELL || OrderType() == OP_SELLSTOP) {
+                            lastOrderType = 1;
+                            if(OrderType() == OP_SELL) {
+                                lastSellPrice = OrderOpenPrice();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Inicijalno postavljanje naloga
+        if((BuyOrders == 0 && SellOrders == 0 && OPBuyStop == 0 && OPSellStop == 0 && allowNewOrders) || 
+           (BuyOrders == SellOrders && OPBuyStop == 0 && OPSellStop == 0)) {
+            bool allowPendingBuy = true;
+            bool allowPendingSell = true;
+            
+            // Reset spacing to default for initial orders
+            currentBuySpacing = PendingSpacing;
+            currentSellSpacing = PendingSpacing;
+            
+            if (!TradeLong || SessionTargetStop || StopMinEquity || SpreadStop || !allowNewOrders || isSideways) {
+                allowPendingBuy = false;
+            }
+            if (!TradeShort || SessionTargetStop || StopMinEquity || SpreadStop || !allowNewOrders || isSideways) {
+                allowPendingSell = false;
+            }
+            
+            if(allowPendingSell) {
+                int pendingSellOrder = OrderSend(Symbol(), OP_SELLSTOP, PendingLots, Bid - currentSellSpacing * Point, 3, 0, 0, "Initial", MagicNumber, 0, Red);
+                if(pendingSellOrder > 0) {
+                    lastSellPrice = Bid;
+                    lowestSellOrderPrice = Bid - currentSellSpacing * Point;
+                }
+            }
+            if(allowPendingBuy) {
+                int pendingBuyOrder = OrderSend(Symbol(), OP_BUYSTOP, PendingLots, Ask + currentBuySpacing * Point, 3, 0, 0, "Initial", MagicNumber, 0, Blue);
+                if(pendingBuyOrder > 0) {
+                    lastBuyPrice = Ask;
+                    highestBuyOrderPrice = Ask + currentBuySpacing * Point;
+                }
+            }
+            initialOrdersPlaced = true;
+        }
+        
+        // Place new orders with dynamic spacing
+        bool validRangeZone = (isSideways && upperRangeZone > 0 && lowerRangeZone > 0 && upperRangeZone > lowerRangeZone);
+        
+        if(allowNewOrders && !StopMinEquity && !SpreadStop && !SessionTargetStop) {
+            // Check for new buy orders when price moves above highest buy order AND above upper range zone
+            bool buyCondition = BuyOrders > 0 && Ask > highestBuyOrderPrice;
+            if(validRangeZone) {
+                buyCondition = buyCondition && Ask > upperRangeZone;
+            }
+            
+            if(buyCondition && TradeLong) {
+                // Use the current buy spacing directly without additional multipliers
+                double newBuyPrice = Ask + currentBuySpacing * Point;
+                int newBuyStop = OrderSend(Symbol(), OP_BUYSTOP, PendingLots, newBuyPrice, 3, 0, 0, "Follow", MagicNumber, 0, Blue);
+                if(newBuyStop > 0) {
+                    highestBuyOrderPrice = newBuyPrice;
+                    lastBuyPrice = Ask;
+                    Print("New buy stop order placed with spacing: ", currentBuySpacing);
+                }
+                
+                // Optional: Add counter sell order
+                if(SellOrders < BuyOrders && TradeShort) {
+                    // Just use currentSellSpacing directly without multiplier
+                    double newSellPrice = Bid - currentSellSpacing * Point;
+                    int counterSellStop = OrderSend(Symbol(), OP_SELLSTOP, PendingLots, newSellPrice, 3, 0, 0, "Counter", MagicNumber, 0, Red);
+                    if(counterSellStop > 0) {
+                        if(lowestSellOrderPrice == 0 || newSellPrice < lowestSellOrderPrice) {
+                            lowestSellOrderPrice = newSellPrice;
+                        }
+                        lastSellPrice = Bid;
+                        Print("Counter sell stop order placed with spacing: ", currentSellSpacing);
+                    }
+                }
+            }
+            
+            // Check for new sell orders when price moves below lowest sell order AND below lower range zone
+            bool sellCondition = SellOrders > 0 && Bid < lowestSellOrderPrice;
+            if(validRangeZone) {
+                sellCondition = sellCondition && Bid < lowerRangeZone;
+            }
+            
+            if(sellCondition && TradeShort) {
+                // Use the current sell spacing directly
+                 newSellPrice = Bid - currentSellSpacing * Point;
+                int newSellStop = OrderSend(Symbol(), OP_SELLSTOP, PendingLots, newSellPrice, 3, 0, 0, "Follow", MagicNumber, 0, Red);
+                if(newSellStop > 0) {
+                    lowestSellOrderPrice = newSellPrice;
+                    lastSellPrice = Bid;
+                    Print("New sell stop order placed with spacing: ", currentSellSpacing);
+                }
+                
+                // Optional: Add counter buy order
+                if(BuyOrders < SellOrders && TradeLong) {
+                    // Just use currentBuySpacing directly
+                   newBuyPrice = Ask + currentBuySpacing * Point;
+                    int counterBuyStop = OrderSend(Symbol(), OP_BUYSTOP, PendingLots, newBuyPrice, 3, 0, 0, "Counter", MagicNumber, 0, Blue);
+                    if(counterBuyStop > 0) {
+                        if(highestBuyOrderPrice == 0 || newBuyPrice > highestBuyOrderPrice) {
+                            highestBuyOrderPrice = newBuyPrice;
+                        }
+                        lastBuyPrice = Ask;
+                        Print("Counter buy stop order placed with spacing: ", currentBuySpacing);
+                    }
+                }
+            }
+        }
+        
+        // For larger quantities of pending orders use greater distances
+        if(OPBuyStop > 10 || OPSellStop >= 10) {
+            if(allowNewOrders && !StopMinEquity && !SpreadStop && !SessionTargetStop) {
+                // For buy orders
+                 buyCondition = BuyOrders > previousBuyOrders;
+                if(validRangeZone) {
+                    buyCondition = buyCondition && Ask > upperRangeZone;
+                }
+                
+                if(buyCondition && TradeLong) {
+                    // Use a base spacing for calculation so we maintain the proportions but with our dynamic spacing
+                    int baseMultiplier = 3; // Original multiplier
+                     newBuyPrice = highestBuyOrderPrice + currentBuySpacing * Point;
+                    if(newBuyPrice > Ask) {
+                       newBuyStop = OrderSend(Symbol(), OP_BUYSTOP, PendingLots, newBuyPrice, 3, 0, 0, "Follow", MagicNumber, 0, Blue);
+                        if(newBuyStop > 0) {
+                            highestBuyOrderPrice = newBuyPrice;
+                            lastBuyPrice = Ask;
+                        }
+                    }
+                    
+                    // Counter sell order
+                    if(TradeShort) {
+                        baseMultiplier = 1; // Just use the currentSellSpacing directly
+                        newSellPrice = lowestSellOrderPrice - currentSellSpacing * Point;
+                       counterSellStop = OrderSend(Symbol(), OP_SELLSTOP, PendingLots, newSellPrice, 3, 0, 0, "Counter", MagicNumber, 0, Red);
+                        if(counterSellStop > 0) {
+                            lowestSellOrderPrice = newSellPrice;
+                            lastSellPrice = Bid;
+                        }
+                    }
+                }
+                
+                // For sell orders
+                 sellCondition = SellOrders > previousSellOrders;
+                if(validRangeZone) {
+                    sellCondition = sellCondition && Bid < lowerRangeZone;
+                }
+                
+                if(sellCondition && TradeShort) {
+                    // Use the current sell spacing directly
+                     newSellPrice = lowestSellOrderPrice - currentSellSpacing * Point;
+                    if(newSellPrice < Bid) {
+                        newSellStop = OrderSend(Symbol(), OP_SELLSTOP, PendingLots, newSellPrice, 3, 0, 0, "Follow", MagicNumber, 0, Red);
+                        if(newSellStop > 0) {
+                            lowestSellOrderPrice = newSellPrice;
+                            lastSellPrice = Bid;
+                        }
+                    }
+                    
+                    // Counter buy order
+                    if(TradeLong) {
+                        // Use the current buy spacing directly
+                        newBuyPrice = highestBuyOrderPrice + currentBuySpacing * Point;
+                        counterBuyStop = OrderSend(Symbol(), OP_BUYSTOP, PendingLots, newBuyPrice, 3, 0, 0, "Counter", MagicNumber, 0, Blue);
+                        if(counterBuyStop > 0) {
+                            highestBuyOrderPrice = newBuyPrice;
+                            lastBuyPrice = Ask;
+                        }
+                    }
+                }
+            }
+        }
+       
+        // Zapamti trenutno stanje za sljedeću iteraciju
+        previousBuyOrders = BuyOrders;
+        previousSellOrders = SellOrders;
+        
+        // Profit target closing logic remains the same
+        static bool singleOrderClosed = false;
+        int totalActiveOrders = BuyOrders + SellOrders;
+        
+        if(totalProfit >= pending_ProfitTarget) {
+            CloseOrdersOptimizedByProfit();
+            ClosePendingBuyStop();
+            ClosePendingSellStop();
+            
+            for(int attempts = 0; attempts < 5; attempts++) {
+                bool allClosed = true;
+                
+                CloseOrdersOptimizedByProfit();
+                ClosePendingBuyStop();
+                ClosePendingSellStop();
+                
+                int checkBuyOrders = 0, checkSellOrders = 0, checkBuyStops = 0, checkSellStops = 0;
+                
+                for(int g = 0; g < OrdersTotal(); g++) {
+                    if(OrderSelect(g, SELECT_BY_POS, MODE_TRADES)) {
+                        if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber) {
+                            if(OrderType() == OP_BUY) checkBuyOrders++;
+                            else if(OrderType() == OP_SELL) checkSellOrders++;
+                            else if(OrderType() == OP_BUYSTOP) checkBuyStops++;
+                            else if(OrderType() == OP_SELLSTOP) checkSellStops++;
+                        }
+                    }
+                }
+                
+                if(checkBuyOrders > 0 || checkSellOrders > 0 || checkBuyStops > 0 || checkSellStops > 0) {
+                    allClosed = false;
+                    int zatvaraj;  
+                    for(int j = OrdersTotal() - 1; j >= 0; j--) {
+                        if(OrderSelect(j, SELECT_BY_POS, MODE_TRADES)) {
+                            if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber) {
+                                if(OrderType() == OP_BUY) {
+                                    zatvaraj = OrderClose(OrderTicket(), OrderLots(), MarketInfo(OrderSymbol(), MODE_BID), 5, Blue);
+                                }
+                                else if(OrderType() == OP_SELL) {
+                                    zatvaraj = OrderClose(OrderTicket(), OrderLots(), MarketInfo(OrderSymbol(), MODE_ASK), 5, Red);
+                                }
+                                else if(OrderType() == OP_BUYSTOP || OrderType() == OP_SELLSTOP) {
+                                    zatvaraj = OrderDelete(OrderTicket());
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    break;
+                }
+            }
+            
+            singleOrderClosed = false;
+            lastOrderType = -1;
+            initialOrdersPlaced = false;
+            lastBuyPrice = 0;
+            lastSellPrice = 0;
+            highestBuyOrderPrice = 0;
+            lowestSellOrderPrice = 0;
+            // Reset spacing when closing all orders
+            currentBuySpacing = PendingSpacing;
+            currentSellSpacing = PendingSpacing;
+            
+            Sleep(1000);
+            
+            if (!TradeLong || SessionTargetStop || StopMinEquity || SpreadStop || !allowNewOrders) {
+                ForceInitialOrderPlacement();
+            }
+        }
+        
+        if(UseTrailingStop) {
+            CheckAndApplyTrailingStop();
+        }
+        if(UseTrailingProfit) {
+            CheckAndApplyTrailingProfit();
+        }
+        LastActionTime = Time[0];
+        break;
+}
+*/  //-----------------
+/*
+switch (Trade_Type) {
+    case 11:
+        Trade_Type = 11;
+        double pending_ProfitTarget = ProfitTarget;
+        
+        double totalProfit = BuyProfit + SellProfit;
+        double lastOrderProfit = 0;
+        int lastTicket = 0;
+        
+        // Variables to track price movement
+        static double lastBuyPrice = 0;
+        static double lastSellPrice = 0;
+        
+        // Variables to track highest buy and lowest sell prices
+        static double highestBuyOrderPrice = 0;
+        static double lowestSellOrderPrice = 0;
+        
+        // Variables for dynamic spacing - now separated for buy and sell
+        static int currentBuySpacing = PendingSpacing;
+        static int currentSellSpacing = PendingSpacing;
+        
+        // Static variable to track orders already processed
+        static datetime lastProcessedTime = 0;
+        
+        // Provjera vremenskog ograničenja
+        bool timeRestricted = IsTimeRestricted();
+        bool hasOpenOrders = HasOpenOrders();
+        
+        // Ažuriraj prikaz poruke o ograničenju
+        ManageTimeRestrictionDisplay(timeRestricted, hasOpenOrders);
+        
+        // Ako je vrijeme ograničeno i nema otvorenih naloga, ne otvaraj nove
+        bool allowNewOrders = !(timeRestricted && !hasOpenOrders);
+        
+        // Provjera je li tržište u sideways stanju
+        bool isSideways = IsSidewaysMarket();
+       
+        // Crtanje Range zone na grafikonu
+        DrawRangeZone();
+        
+        // Varijable za granice sideways zone
+        double upperRangeZone = 0;
+        double lowerRangeZone = 0;
+        
+        // Dohvati granice sideways zone
+        if (isSideways) {
+            if(GlobalVariableCheck("RangeHigh")) {
+                upperRangeZone = GlobalVariableGet("RangeHigh");
+            }
+            if(GlobalVariableCheck("RangeLow")) {
+                lowerRangeZone = GlobalVariableGet("RangeLow");
+            }
+            
+            if(upperRangeZone == 0 || lowerRangeZone == 0) {
+                for(int obj = ObjectsTotal() - 1; obj >= 0; obj--) {
+                    string objName = ObjectName(obj);
+                    if(StringFind(objName, "RangeHigh") >= 0 && ObjectType(objName) == OBJ_HLINE) {
+                        upperRangeZone = ObjectGet(objName, OBJPROP_PRICE1);
+                    }
+                    else if(StringFind(objName, "RangeLow") >= 0 && ObjectType(objName) == OBJ_HLINE) {
+                        lowerRangeZone = ObjectGet(objName, OBJPROP_PRICE1);
+                    }
+                }
+            }
+        }
+        
+        // Check for triggered orders ONLY when we haven't processed them yet
+        if (Time[0] > lastProcessedTime) {
+            lastProcessedTime = Time[0]; // Update the time so we only process once per bar
+            
+            // Process historical orders to adjust spacing
+            datetime latestOrderTime = 0;
+            for(int m = OrdersHistoryTotal()-1; m >= 0; m--) {
+                if(OrderSelect(m, SELECT_BY_POS, MODE_HISTORY)) {
+                    if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber && OrderCloseTime() > LastActionTime) {
+                        // Record the latest order time
+                        if(OrderCloseTime() > latestOrderTime) {
+                            latestOrderTime = OrderCloseTime();
+                        }
+                        
+                        // If a buy stop was triggered (converted to buy)
+                        if(OrderType() == OP_BUY && OrderComment() == "Follow") {
+                            currentSellSpacing += 10; // Increase sell spacing when buy order is activated
+                            Print("Buy order activated - Sell spacing increased to ", currentSellSpacing);
+                        }
+                        // If a sell stop was triggered (converted to sell)
+                        else if(OrderType() == OP_SELL && OrderComment() == "Follow") {
+                            currentBuySpacing += 10; // Increase buy spacing when sell order is activated
+                            Print("Sell order activated - Buy spacing increased to ", currentBuySpacing);
+                        }
+                    }
+                }
+            }
+    
+            // Update LastActionTime to latest order time if any were found
+            if(latestOrderTime > 0) {
+                LastActionTime = latestOrderTime;
+            }
+        }
+        
+        // Find highest buy and lowest sell order prices
+        highestBuyOrderPrice = 0;
+        lowestSellOrderPrice = 0;
+        
+        for(int s = 0; s < OrdersTotal(); s++) {
+            if(OrderSelect(s, SELECT_BY_POS, MODE_TRADES)) {
+                if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber) {
+                    if(OrderType() == OP_BUY || OrderType() == OP_BUYSTOP) {
+                        double orderPrice = OrderType() == OP_BUY ? OrderOpenPrice() : OrderOpenPrice();
+                        if(orderPrice > highestBuyOrderPrice || highestBuyOrderPrice == 0) {
+                            highestBuyOrderPrice = orderPrice;
+                        }
+                    }
+                    else if(OrderType() == OP_SELL || OrderType() == OP_SELLSTOP) {
+                        orderPrice = OrderType() == OP_SELL ? OrderOpenPrice() : OrderOpenPrice();
+                        if(orderPrice < lowestSellOrderPrice || lowestSellOrderPrice == 0) {
+                            lowestSellOrderPrice = orderPrice;
+                        }
+                    }
+                    
+                    if(OrderTicket() > lastTicket) {
+                        lastTicket = OrderTicket();
+                        lastOrderProfit = OrderProfit();
+                        
+                        if(OrderType() == OP_BUY || OrderType() == OP_BUYSTOP) {
+                            lastOrderType = 0;
+                            if(OrderType() == OP_BUY) {
+                                lastBuyPrice = OrderOpenPrice();
+                            }
+                        } 
+                        else if(OrderType() == OP_SELL || OrderType() == OP_SELLSTOP) {
+                            lastOrderType = 1;
+                            if(OrderType() == OP_SELL) {
+                                lastSellPrice = OrderOpenPrice();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Count open orders and determine current spacing
+        int actualBuyOrders = 0;
+        int actualSellOrders = 0;
+        
+        for(int c = 0; c < OrdersTotal(); c++) {
+            if(OrderSelect(c, SELECT_BY_POS, MODE_TRADES)) {
+                if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber) {
+                    if(OrderType() == OP_BUY) actualBuyOrders++;
+                    else if(OrderType() == OP_SELL) actualSellOrders++;
+                }
+            }
+        }
+        
+        // Additional debugging
+        Print("Current Buy Spacing: ", currentBuySpacing, " | Current Sell Spacing: ", currentSellSpacing);
+        Print("Actual Buy Orders: ", actualBuyOrders, " | Actual Sell Orders: ", actualSellOrders);
+        
+        // Inicijalno postavljanje naloga
+        if((BuyOrders == 0 && SellOrders == 0 && OPBuyStop == 0 && OPSellStop == 0 && allowNewOrders) || 
+           (BuyOrders == SellOrders && OPBuyStop == 0 && OPSellStop == 0)) {
+            bool allowPendingBuy = true;
+            bool allowPendingSell = true;
+            
+            // Reset spacing to default for initial orders
+            currentBuySpacing = PendingSpacing;
+            currentSellSpacing = PendingSpacing;
+            
+            if (!TradeLong || SessionTargetStop || StopMinEquity || SpreadStop || !allowNewOrders || isSideways) {
+                allowPendingBuy = false;
+            }
+            if (!TradeShort || SessionTargetStop || StopMinEquity || SpreadStop || !allowNewOrders || isSideways) {
+                allowPendingSell = false;
+            }
+            
+            if(allowPendingSell) {
+                int pendingSellOrder = OrderSend(Symbol(), OP_SELLSTOP, PendingLots, Bid - currentSellSpacing * Point, 3, 0, 0, "Initial", MagicNumber, 0, Red);
+                if(pendingSellOrder > 0) {
+                    lastSellPrice = Bid;
+                    lowestSellOrderPrice = Bid - currentSellSpacing * Point;
+                }
+            }
+            if(allowPendingBuy) {
+                int pendingBuyOrder = OrderSend(Symbol(), OP_BUYSTOP, PendingLots, Ask + currentBuySpacing * Point, 3, 0, 0, "Initial", MagicNumber, 0, Blue);
+                if(pendingBuyOrder > 0) {
+                    lastBuyPrice = Ask;
+                    highestBuyOrderPrice = Ask + currentBuySpacing * Point;
+                }
+            }
+            initialOrdersPlaced = true;
+        }
+        
+        // Place new orders with dynamic spacing
+        bool validRangeZone = (isSideways && upperRangeZone > 0 && lowerRangeZone > 0 && upperRangeZone > lowerRangeZone);
+        
+        if(allowNewOrders && !StopMinEquity && !SpreadStop && !SessionTargetStop) {
+            // Check for new buy orders when price moves above highest buy order AND above upper range zone
+            bool buyCondition = BuyOrders > 0 && Ask > highestBuyOrderPrice;
+            if(validRangeZone) {
+                buyCondition = buyCondition && Ask > upperRangeZone;
+            }
+            
+            if(buyCondition && TradeLong) {
+                // Use the current buy spacing directly without additional multipliers
+                double newBuyPrice = Ask + currentBuySpacing * Point;
+                int newBuyStop = OrderSend(Symbol(), OP_BUYSTOP, PendingLots, newBuyPrice, 3, 0, 0, "Follow", MagicNumber, 0, Blue);
+                if(newBuyStop > 0) {
+                    highestBuyOrderPrice = newBuyPrice;
+                    lastBuyPrice = Ask;
+                    Print("New buy stop order placed with spacing: ", currentBuySpacing);
+                }
+                
+                // Optional: Add counter sell order
+                if(SellOrders < BuyOrders && TradeShort) {
+                    // Just use currentSellSpacing directly without multiplier
+                    double newSellPrice = Bid - currentSellSpacing * Point;
+                    int counterSellStop = OrderSend(Symbol(), OP_SELLSTOP, PendingLots, newSellPrice, 3, 0, 0, "Counter", MagicNumber, 0, Red);
+                    if(counterSellStop > 0) {
+                        if(lowestSellOrderPrice == 0 || newSellPrice < lowestSellOrderPrice) {
+                            lowestSellOrderPrice = newSellPrice;
+                        }
+                        lastSellPrice = Bid;
+                        Print("Counter sell stop order placed with spacing: ", currentSellSpacing);
+                    }
+                }
+            }
+            
+            // Check for new sell orders when price moves below lowest sell order AND below lower range zone
+            bool sellCondition = SellOrders > 0 && Bid < lowestSellOrderPrice;
+            if(validRangeZone) {
+                sellCondition = sellCondition && Bid < lowerRangeZone;
+            }
+            
+            if(sellCondition && TradeShort) {
+                // Use the current sell spacing directly
+                newSellPrice = Bid - currentSellSpacing * Point;
+                int newSellStop = OrderSend(Symbol(), OP_SELLSTOP, PendingLots, newSellPrice, 3, 0, 0, "Follow", MagicNumber, 0, Red);
+                if(newSellStop > 0) {
+                    lowestSellOrderPrice = newSellPrice;
+                    lastSellPrice = Bid;
+                    Print("New sell stop order placed with spacing: ", currentSellSpacing);
+                }
+                
+                // Optional: Add counter buy order
+                if(BuyOrders < SellOrders && TradeLong) {
+                    // Just use currentBuySpacing directly
+                     newBuyPrice = Ask + currentBuySpacing * Point;
+                    int counterBuyStop = OrderSend(Symbol(), OP_BUYSTOP, PendingLots, newBuyPrice, 3, 0, 0, "Counter", MagicNumber, 0, Blue);
+                    if(counterBuyStop > 0) {
+                        if(highestBuyOrderPrice == 0 || newBuyPrice > highestBuyOrderPrice) {
+                            highestBuyOrderPrice = newBuyPrice;
+                        }
+                        lastBuyPrice = Ask;
+                        Print("Counter buy stop order placed with spacing: ", currentBuySpacing);
+                    }
+                }
+            }
+        }
+        
+        
+       
+        // Zapamti trenutno stanje za sljedeću iteraciju
+        previousBuyOrders = BuyOrders;
+        previousSellOrders = SellOrders;
+        
+      
+        // Profit target closing logic remains the same
+        static bool singleOrderClosed = false;
+        int totalActiveOrders = BuyOrders + SellOrders;
+        
+        if(totalProfit >= pending_ProfitTarget) {
+            CloseOrdersOptimizedByProfit();
+            ClosePendingBuyStop();
+            ClosePendingSellStop();
+            
+            for(int attempts = 0; attempts < 5; attempts++) {
+                bool allClosed = true;
+                
+                CloseOrdersOptimizedByProfit();
+                ClosePendingBuyStop();
+                ClosePendingSellStop();
+                
+                int checkBuyOrders = 0, checkSellOrders = 0, checkBuyStops = 0, checkSellStops = 0;
+                
+                for(int g = 0; g < OrdersTotal(); g++) {
+                    if(OrderSelect(g, SELECT_BY_POS, MODE_TRADES)) {
+                        if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber) {
+                            if(OrderType() == OP_BUY) checkBuyOrders++;
+                            else if(OrderType() == OP_SELL) checkSellOrders++;
+                            else if(OrderType() == OP_BUYSTOP) checkBuyStops++;
+                            else if(OrderType() == OP_SELLSTOP) checkSellStops++;
+                        }
+                    }
+                }
+                
+            //-----------------------------
+          // For larger quantities of pending orders use greater distances
+        if(OPBuyStop > 5 || OPSellStop >= 5) {
+            if(allowNewOrders && !StopMinEquity && !SpreadStop && !SessionTargetStop) {
+                // For buy orders
+                 buyCondition = BuyOrders > previousBuyOrders;
+                if(validRangeZone) {
+                    buyCondition = buyCondition && Ask > upperRangeZone;
+                }
+                
+                if(buyCondition && TradeLong) {
+                    // Use a base spacing for calculation so we maintain the proportions but with our dynamic spacing
+                    int baseMultiplier = 3; // Original multiplier
+                     newBuyPrice = highestBuyOrderPrice + currentBuySpacing * Point;
+                    if(newBuyPrice > Ask) {
+                       newBuyStop = OrderSend(Symbol(), OP_BUYSTOP, PendingLots*checkSellOrders, newBuyPrice, 3, 0, 0, "Follow", MagicNumber, 0, Blue);
+                        if(newBuyStop > 0) {
+                            highestBuyOrderPrice = newBuyPrice;
+                            lastBuyPrice = Ask;
+                        }
+                    }
+                    
+                    // Counter sell order
+                    if(TradeShort) {
+                        baseMultiplier = 1; // Just use the currentSellSpacing directly
+                        newSellPrice = lowestSellOrderPrice - currentSellSpacing * Point;
+                       counterSellStop = OrderSend(Symbol(), OP_SELLSTOP, PendingLots*checkBuyOrders, newSellPrice, 3, 0, 0, "Counter", MagicNumber, 0, Red);
+                        if(counterSellStop > 0) {
+                            lowestSellOrderPrice = newSellPrice;
+                            lastSellPrice = Bid;
+                        }
+                    }
+                }
+                
+                // For sell orders
+                 sellCondition = SellOrders > previousSellOrders;
+                if(validRangeZone) {
+                    sellCondition = sellCondition && Bid < lowerRangeZone;
+                }
+                
+                if(sellCondition && TradeShort) {
+                    // Use the current sell spacing directly
+                     newSellPrice = lowestSellOrderPrice - currentSellSpacing * Point;
+                    if(newSellPrice < Bid) {
+                        newSellStop = OrderSend(Symbol(), OP_SELLSTOP, PendingLots*checkBuyOrders, newSellPrice, 3, 0, 0, "Follow", MagicNumber, 0, Red);
+                        if(newSellStop > 0) {
+                            lowestSellOrderPrice = newSellPrice;
+                            lastSellPrice = Bid;
+                        }
+                    }
+                    
+                    // Counter buy order
+                    if(TradeLong) {
+                        // Use the current buy spacing directly
+                        newBuyPrice = highestBuyOrderPrice + currentBuySpacing * Point;
+                        counterBuyStop = OrderSend(Symbol(), OP_BUYSTOP, PendingLots*checkSellOrders, newBuyPrice, 3, 0, 0, "Counter", MagicNumber, 0, Blue);
+                        if(counterBuyStop > 0) {
+                            highestBuyOrderPrice = newBuyPrice;
+                            lastBuyPrice = Ask;
+                        }
+                    }
+                }
+            }
+        }
+       
+        //-----------------------------------     
+                
+                
+                
+                
+                
+                
+                
+                if(checkBuyOrders > 0 || checkSellOrders > 0 || checkBuyStops > 0 || checkSellStops > 0) {
+                    allClosed = false;
+                    int zatvaraj;  
+                    for(int j = OrdersTotal() - 1; j >= 0; j--) {
+                        if(OrderSelect(j, SELECT_BY_POS, MODE_TRADES)) {
+                            if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber) {
+                                if(OrderType() == OP_BUY) {
+                                    zatvaraj = OrderClose(OrderTicket(), OrderLots(), MarketInfo(OrderSymbol(), MODE_BID), 5, Blue);
+                                }
+                                else if(OrderType() == OP_SELL) {
+                                    zatvaraj = OrderClose(OrderTicket(), OrderLots(), MarketInfo(OrderSymbol(), MODE_ASK), 5, Red);
+                                }
+                                else if(OrderType() == OP_BUYSTOP || OrderType() == OP_SELLSTOP) {
+                                    zatvaraj = OrderDelete(OrderTicket());
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    break;
+                }
+            }
+            
+            singleOrderClosed = false;
+            lastOrderType = -1;
+            initialOrdersPlaced = false;
+            lastBuyPrice = 0;
+            lastSellPrice = 0;
+            highestBuyOrderPrice = 0;
+            lowestSellOrderPrice = 0;
+            // Reset spacing when closing all orders
+            currentBuySpacing = PendingSpacing;
+            currentSellSpacing = PendingSpacing;
+            
+            Sleep(1000);
+            
+            if (!TradeLong || SessionTargetStop || StopMinEquity || SpreadStop || !allowNewOrders) {
+                ForceInitialOrderPlacement();
+            }
+        }
+        
+        if(UseTrailingStop) {
+            CheckAndApplyTrailingStop();
+        }
+        if(UseTrailingProfit) {
+            CheckAndApplyTrailingProfit();
+        }
+        LastActionTime = Time[0];
+        break;
+}
+
+*/
+switch (Trade_Type) {
+    case 11:
+        Trade_Type = 11;
+        double pending_ProfitTarget = ProfitTarget;
+        
+        double totalProfit = BuyProfit + SellProfit;
+        double lastOrderProfit = 0;
+        int lastTicket = 0;
+        
+        // Variables to track price movement
+        static double lastBuyPrice = 0;
+        static double lastSellPrice = 0;
+        
+        // Variables to track highest buy and lowest sell prices
+        static double highestBuyOrderPrice = 0;
+        static double lowestSellOrderPrice = 0;
+        
+        // Track if both initial orders have been triggered
+        static bool bothInitialOrdersTriggered = false;
+        
+        // Variables for dynamic spacing - now separated for buy and sell
+        int currentBuySpacing = PendingSpacing; 
+        int currentSellSpacing = PendingSpacing;
+        
+        // Provjera vremenskog ograničenja
+        bool timeRestricted = IsTimeRestricted();
+        bool hasOpenOrders = HasOpenOrders();
+        
+        // Ažuriraj prikaz poruke o ograničenju
+        ManageTimeRestrictionDisplay(timeRestricted, hasOpenOrders);
+        
+        // Ako je vrijeme ograničeno i nema otvorenih naloga, ne otvaraj nove
+        bool allowNewOrders = !(timeRestricted && !hasOpenOrders);
+        
+        // Provjera je li tržište u sideways stanju
+        bool isSideways = IsSidewaysMarket();
+       
+        // Crtanje Range zone na grafikonu
+        DrawRangeZone();
+        
+        // Varijable za granice sideways zone
+        double upperRangeZone = 0;
+        double lowerRangeZone = 0;
+        
+        // Dohvati granice sideways zone
+        if (isSideways) {
+            if(GlobalVariableCheck("RangeHigh")) {
+                upperRangeZone = GlobalVariableGet("RangeHigh");
+            }
+            if(GlobalVariableCheck("RangeLow")) {
+                lowerRangeZone = GlobalVariableGet("RangeLow");
+            }
+            
+            if(upperRangeZone == 0 || lowerRangeZone == 0) {
+                for(int obj = ObjectsTotal() - 1; obj >= 0; obj--) {
+                    string objName = ObjectName(obj);
+                    if(StringFind(objName, "RangeHigh") >= 0 && ObjectType(objName) == OBJ_HLINE) {
+                        upperRangeZone = ObjectGet(objName, OBJPROP_PRICE1);
+                    }
+                    else if(StringFind(objName, "RangeLow") >= 0 && ObjectType(objName) == OBJ_HLINE) {
+                        lowerRangeZone = ObjectGet(objName, OBJPROP_PRICE1);
+                    }
+                }
+            }
+        }
+        
+        // Count open orders and calculate spacing based on current orders
+        int actualBuyOrders = 0;
+        int actualSellOrders = 0;
+        int actualBuyStopOrders = 0;
+        int actualSellStopOrders = 0;
+        
+        for(int c = 0; c < OrdersTotal(); c++) {
+            if(OrderSelect(c, SELECT_BY_POS, MODE_TRADES)) {
+                if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber) {
+                    if(OrderType() == OP_BUY) actualBuyOrders++;
+                    else if(OrderType() == OP_SELL) actualSellOrders++;
+                    else if(OrderType() == OP_BUYSTOP) actualBuyStopOrders++;
+                    else if(OrderType() == OP_SELLSTOP) actualSellStopOrders++;
+                }
+            }
+        }
+        
+        // Check if both initial orders have been triggered
+        if(!bothInitialOrdersTriggered && (actualBuyOrders > 0 || actualSellOrders > 0)) {
+            if(actualBuyOrders > 0 && actualSellOrders > 0) {
+                bothInitialOrdersTriggered = true;
+            }
+        }
+        
+        // Calculate spacing based on current orders
+        currentSellSpacing = PendingSpacing + (actualBuyOrders * Spacing_Multiplayer);
+        currentBuySpacing = PendingSpacing + (actualSellOrders * Spacing_Multiplayer);
+        
+        // Dodatni debugging
+        Print("Current Buy Spacing: ", currentBuySpacing, " | Current Sell Spacing: ", currentSellSpacing);
+        Print("Actual Buy Orders: ", actualBuyOrders, " | Actual Sell Orders: ", actualSellOrders);
+        
+        // Find highest buy and lowest sell order prices
+        highestBuyOrderPrice = 0;
+        lowestSellOrderPrice = 0;
+        
+        for(int s = 0; s < OrdersTotal(); s++) {
+            if(OrderSelect(s, SELECT_BY_POS, MODE_TRADES)) {
+                if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber) {
+                    if(OrderType() == OP_BUY || OrderType() == OP_BUYSTOP) {
+                        double orderPrice = OrderType() == OP_BUY ? OrderOpenPrice() : OrderOpenPrice();
+                        if(orderPrice > highestBuyOrderPrice || highestBuyOrderPrice == 0) {
+                            highestBuyOrderPrice = orderPrice;
+                        }
+                    }
+                    else if(OrderType() == OP_SELL || OrderType() == OP_SELLSTOP) {
+                        orderPrice = OrderType() == OP_SELL ? OrderOpenPrice() : OrderOpenPrice();
+                        if(orderPrice < lowestSellOrderPrice || lowestSellOrderPrice == 0) {
+                            lowestSellOrderPrice = orderPrice;
+                        }
+                    }
+                    
+                    if(OrderTicket() > lastTicket) {
+                        lastTicket = OrderTicket();
+                        lastOrderProfit = OrderProfit();
+                        
+                        if(OrderType() == OP_BUY || OrderType() == OP_BUYSTOP) {
+                            lastOrderType = 0;
+                            if(OrderType() == OP_BUY) {
+                                lastBuyPrice = OrderOpenPrice();
+                            }
+                        } 
+                        else if(OrderType() == OP_SELL || OrderType() == OP_SELLSTOP) {
+                            lastOrderType = 1;
+                            if(OrderType() == OP_SELL) {
+                                lastSellPrice = OrderOpenPrice();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Inicijalno postavljanje naloga (uvijek postavi oba pendinga)
+        if((BuyOrders == 0 && SellOrders == 0 && OPBuyStop == 0 && OPSellStop == 0 && allowNewOrders) || 
+           (BuyOrders == SellOrders && OPBuyStop == 0 && OPSellStop == 0)) {
+            bool allowPendingBuy = true;
+            bool allowPendingSell = true;
+            
+            // Reset bothInitialOrdersTriggered flag
+            bothInitialOrdersTriggered = false;
+            
+            // Kod inicijalnih naloga koristimo osnovni spacing
+            currentBuySpacing = PendingSpacing;
+            currentSellSpacing = PendingSpacing;
+            
+            if (!TradeLong || SessionTargetStop || StopMinEquity || SpreadStop || !allowNewOrders || isSideways) {
+                allowPendingBuy = false;
+            }
+            if (!TradeShort || SessionTargetStop || StopMinEquity || SpreadStop || !allowNewOrders || isSideways) {
+                allowPendingSell = false;
+            }
+            
+            if(allowPendingSell) {
+                int pendingSellOrder = OrderSend(Symbol(), OP_SELLSTOP, PendingLots, Bid - currentSellSpacing * Point, 3, 0, 0, "Initial", MagicNumber, 0, Red);
+                if(pendingSellOrder > 0) {
+                    lastSellPrice = Bid;
+                    lowestSellOrderPrice = Bid - currentSellSpacing * Point;
+                }
+            }
+            if(allowPendingBuy) {
+                int pendingBuyOrder = OrderSend(Symbol(), OP_BUYSTOP, PendingLots, Ask + currentBuySpacing * Point, 3, 0, 0, "Initial", MagicNumber, 0, Blue);
+                if(pendingBuyOrder > 0) {
+                    lastBuyPrice = Ask;
+                    highestBuyOrderPrice = Ask + currentBuySpacing * Point;
+                }
+            }
+            initialOrdersPlaced = true;
+        }
+        
+        // Place new orders only after both initial orders have been triggered
+        bool validRangeZone = (isSideways && upperRangeZone > 0 && lowerRangeZone > 0 && upperRangeZone > lowerRangeZone);
+        
+        if(allowNewOrders && !StopMinEquity && !SpreadStop && !SessionTargetStop && bothInitialOrdersTriggered) {
+            // Determine which side is in profit
+            bool buySideInProfit = BuyProfit > SellProfit;
+            bool sellSideInProfit = SellProfit > BuyProfit;
+            
+            // Check for new buy orders when price moves above highest buy order AND above upper range zone
+            bool buyCondition = BuyOrders > 0 && Ask > highestBuyOrderPrice;
+            if(validRangeZone) {
+                buyCondition = buyCondition && Ask > upperRangeZone;
+            }
+            
+            // Only place new buy orders if buy side is in profit
+            if(buyCondition && TradeLong && buySideInProfit) {
+                double newBuyPrice = Ask + currentBuySpacing * Point;
+                int newBuyStop = OrderSend(Symbol(), OP_BUYSTOP, PendingLots, newBuyPrice, 3, 0, 0, "Follow", MagicNumber, 0, Blue);
+                if(newBuyStop > 0) {
+                    highestBuyOrderPrice = newBuyPrice;
+                    lastBuyPrice = Ask;
+                    Print("New buy stop order placed with spacing: ", currentBuySpacing);
+                }
+            }
+            
+            // Check for new sell orders when price moves below lowest sell order AND below lower range zone
+            bool sellCondition = SellOrders > 0 && Bid < lowestSellOrderPrice;
+            if(validRangeZone) {
+                sellCondition = sellCondition && Bid < lowerRangeZone;
+            }
+            
+            // Only place new sell orders if sell side is in profit
+            if(sellCondition && TradeShort && sellSideInProfit) {
+                double newSellPrice = Bid - currentSellSpacing * Point;
+                int newSellStop = OrderSend(Symbol(), OP_SELLSTOP, PendingLots, newSellPrice, 3, 0, 0, "Follow", MagicNumber, 0, Red);
+                if(newSellStop > 0) {
+                    lowestSellOrderPrice = newSellPrice;
+                    lastSellPrice = Bid;
+                    Print("New sell stop order placed with spacing: ", currentSellSpacing);
+                }
+            }
+        }
+        
+        // Zapamti trenutno stanje za sljedeću iteraciju
+        previousBuyOrders = BuyOrders;
+        previousSellOrders = SellOrders;
+        
+        // Profit target closing logic remains the same
+        static bool singleOrderClosed = false;
+        int totalActiveOrders = BuyOrders + SellOrders;
+        
+        if(totalProfit >= pending_ProfitTarget) {
+            CloseOrdersOptimizedByProfit();
+            ClosePendingBuyStop();
+            ClosePendingSellStop();
+            
+            for(int attempts = 0; attempts < 5; attempts++) {
+                bool allClosed = true;
+                
+                CloseOrdersOptimizedByProfit();
+                ClosePendingBuyStop();
+                ClosePendingSellStop();
+                
+                int checkBuyOrders = 0, checkSellOrders = 0, checkBuyStops = 0, checkSellStops = 0;
+                
+                for(int g = 0; g < OrdersTotal(); g++) {
+                    if(OrderSelect(g, SELECT_BY_POS, MODE_TRADES)) {
+                        if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber) {
+                            if(OrderType() == OP_BUY) checkBuyOrders++;
+                            else if(OrderType() == OP_SELL) checkSellOrders++;
+                            else if(OrderType() == OP_BUYSTOP) checkBuyStops++;
+                            else if(OrderType() == OP_SELLSTOP) checkSellStops++;
+                        }
+                    }
+                }
+                
+                if(checkBuyOrders > 0 || checkSellOrders > 0 || checkBuyStops > 0 || checkSellStops > 0) {
+                    allClosed = false;
+                    int zatvaraj;  
+                    for(int j = OrdersTotal() - 1; j >= 0; j--) {
+                        if(OrderSelect(j, SELECT_BY_POS, MODE_TRADES)) {
+                            if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber) {
+                                if(OrderType() == OP_BUY) {
+                                    zatvaraj = OrderClose(OrderTicket(), OrderLots(), MarketInfo(OrderSymbol(), MODE_BID), 5, Blue);
+                                }
+                                else if(OrderType() == OP_SELL) {
+                                    zatvaraj = OrderClose(OrderTicket(), OrderLots(), MarketInfo(OrderSymbol(), MODE_ASK), 5, Red);
+                                }
+                                else if(OrderType() == OP_BUYSTOP || OrderType() == OP_SELLSTOP) {
+                                    zatvaraj = OrderDelete(OrderTicket());
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    break;
+                }
+            }
+            
+            singleOrderClosed = false;
+            lastOrderType = -1;
+            initialOrdersPlaced = false;
+            lastBuyPrice = 0;
+            lastSellPrice = 0;
+            highestBuyOrderPrice = 0;
+            lowestSellOrderPrice = 0;
+            bothInitialOrdersTriggered = false;
+            
+            Sleep(1000);
+            
+            if (!TradeLong || SessionTargetStop || StopMinEquity || SpreadStop || !allowNewOrders) {
+                ForceInitialOrderPlacement();
+            }
+        }
+        
+        if(UseTrailingStop) {
+            CheckAndApplyTrailingStop();
+        }
+        if(UseTrailingProfit) {
+            CheckAndApplyTrailingProfit();
+        }
+        LastActionTime = Time[0];
+        break;
+}
+
+   }//if manual butons==false
+//-------------------------------------------------------------
+    
+
+//---------------------------end buy sell logic
+   if(AccountMargin()!=0)
+     {
+      MarginPercent = MathRound((AccountEquity() / AccountMargin()) * 100);
+     }
+
+   if(LowMarginPercent > MarginPercent)
+      LowMarginPercent = MarginPercent;
+   if(AccountEquity() < LowEquity)
+      LowEquity = AccountEquity();
+   double BuySellProfit=BuyProfit+SellProfit;
+
+   double buyLots=BuyLots;
+   double sellLots=SellLots;
+
+//-------------
+
+
+   if(value_to_toggle==0)
+     {
+      FrameLB(4,130,20,430,430);//}//postavljenje back labela kod manual moda
+
+      FrameLBS(2,90,180,620,180);//background black label za nuy sell buttons
+      string k1 ="Buys"        "                      "+BuyOrders+"   ""    BuyStop: "+OPBuyStop+  "";
+      string k2 ="BuyLots"     "                "+DoubleToStr(BuyLots,2)+"";
+      string k3 ="BuysInProfit "              "  "+DoubleToStr(PosBuyProfit,2)+"";
+      string k4 ="Highest Buy  "       " "+DoubleToStr(HighestBuy,Digits)+" #"+DoubleToStr(HighestBuyTicket,0)+"  Profit: "+DoubleToStr(HighestBuyProfit,2)+"";
+      string k5 ="Lowest Buy   "       " "+DoubleToStr(LowestBuy,Digits)+" #"+DoubleToStr(LowestBuyTicket,0)+"  Profit: "+DoubleToStr(LowestBuyProfit,2)+"";
+      string k6 ="Sells"       "                     "+SellOrders+"   ""    SellStop: "+OPSellStop+  "";
+      string k7 ="SellLots"    "               "+DoubleToStr(SellLots,2)+"";
+      string k8 ="SellsInProfit"              "   "+DoubleToStr(PosSellProfit,2)+"";
+      string k9 ="Highest Sell"        "   "+DoubleToStr(HighestSell,Digits)+" #"+DoubleToStr(HighestSellTicket,0)+"  Profit: "+DoubleToStr(HighestSellProfit,2)+"";
+      string k10 ="Lowest Sell  "          "  "+DoubleToStr(LowestSell,Digits)+" #"+DoubleToStr(LowestSellTicket,0)+"  Profit: "+DoubleToStr(LowestSellProfit,2)+"";
+      string k11 ="BP+SP        "             "   "+DoubleToStr(PosSellProfit+PosBuyProfit,2)+"";
+      string k12 ="BuyProfit    "             "    "+DoubleToStr(BuyProfit,2)+"";
+      string k13 ="SellProfit    "             "    "+DoubleToStr(SellProfit,2)+"";
+
+
+      Write1("pmk_17", 0, 0, 110, 30, k1, 9, "Vedrana", White);//bez ovoga ne prikazuje prvi red kada je backlabel na true a to sluzi da su candle iza labela
+      Write1("pmk_1", 0, 0, 110, 30, k1, 9, "Vedrana", White);
+      Write1("pmk_2", 0, 0, 110, 50, k2, 9, "Vedrana", Yellow);
+      Write1("pmk_3", 0, 0, 110, 70, k12, 11, "Vedrana", DodgerBlue);
+      Write1("pmk_4", 0, 0, 110, 90, k3, 11, "Vedrana", DodgerBlue);
+      Write1("pmk_5", 0, 0, 110, 110, k4, 11, "Vedrana", DodgerBlue);
+      Write1("pmk_6", 0, 0, 110, 130, k5, 11, "Vedrana", DodgerBlue);
+      Write1("pmk_7", 0, 0, 110, 150, k6, 9, "Vedrana", White);
+      Write1("pmk_8", 0, 0, 110, 170, k7, 9, "Vedrana", Yellow);
+      Write1("pmk_9", 0, 0, 110, 190, k13, 11, "Vedrana", Red);
+      Write1("pmk_10", 0, 0, 110, 210, k8, 11, "Vedrana", Red);
+      Write1("pmk_11", 0, 0, 110, 230, k9, 11, "Vedrana", Red);
+      Write1("pmk_12", 0, 0, 110, 250, k10, 11, "Vedrana", Red);
+      Write1("pmk_13", 0, 0, 110, 270, k11, 11, "Vedrana", Orange);
+
+     }//value to togle==0
+//---------------------------------------------
+
+//brisanje pozadinskog labela i vrjednosti kod auomatskog trejda
+   if(value_to_toggle==1)
+     {
+      FrameLB(0,0,0,0,0);
+      FrameLBS(0,0,0,0,0);
+      Write1("pmk_17", 0, 0, 110, 30, "", 9, "Vedrana", White);
+      Write1("pmk_1", 0, 0, 110, 30, "", 9, "Vedrana", White);
+      Write1("pmk_2", 0, 0, 110, 50, "", 9, "Vedrana", Yellow);
+      Write1("pmk_3", 0, 0, 110, 70, "", 11, "Vedrana", DodgerBlue);
+      Write1("pmk_4", 0, 0, 110, 90, "", 11, "Vedrana", DodgerBlue);
+      Write1("pmk_5", 0, 0, 110, 110, "", 11, "Vedrana", DodgerBlue);
+      Write1("pmk_6", 0, 0, 110, 130, "", 9, "Vedrana", White);
+      Write1("pmk_7", 0, 0, 110, 150, "", 9, "Vedrana", Yellow);
+      Write1("pmk_8", 0, 0, 110, 170, "", 11, "Vedrana", Red);
+      Write1("pmk_9", 0, 0, 110, 190, "", 11, "Vedrana", Red);
+      Write1("pmk_10", 0, 0, 110, 210, "", 11, "Vedrana", Red);
+      Write1("pmk_11", 0, 0, 110, 250, "", 11, "Vedrana", Orange);
+      Write1("pmk_12", 0, 0, 110, 250, "", 11, "Vedrana", Red);
+      Write1("pmk_13", 0, 0, 110, 270, "", 11, "Vedrana", Orange);
+     }//if value to togle==1
+
+//*******************************************************************************************************************
+//*************************************************************
+//za mod pending trad ako je auto  da se vidi broj naloga
+//-------------***********************************************
+
+
+   if(value_to_toggle==1&& Trade_Type==11)
+     {
+    FrameLB(4,130,20,430,430);//}//postavljenje back labela kod manual moda
+
+    //  FrameLBS(2,90,180,620,180);//background black label za nuy sell buttons
+      string k100 ="Buys"        "                      "+BuyOrders+"  Highest: "+MaxBuys+"";
+      string k200 ="BuyLots"     "                "+DoubleToStr(BuyLots,2)+"";
+      string k300 ="BuysInProfit "              "  "+DoubleToStr(PosBuyProfit,2)+"";
+      string k400 ="BuyStop      "              "  "+OPBuyStop+"" ;
+     // OPBuyStop==0 && OPSellStop==0
+     // string k400 ="Highest Buy  "       " "+DoubleToStr(HighestBuy,Digits)+" #"+DoubleToStr(HighestBuyTicket,0)+"  Profit: "+DoubleToStr(HighestBuyProfit,2)+"";
+     // string k500 ="Lowest Buy   "       " "+DoubleToStr(LowestBuy,Digits)+" #"+DoubleToStr(LowestBuyTicket,0)+"  Profit: "+DoubleToStr(LowestBuyProfit,2)+"";
+      string k600 ="Sells"       "                     "+SellOrders+"  Highest: "+MaxSells+"";
+      string k700 ="SellLots"    "               "+DoubleToStr(SellLots,2)+"";
+      string k800 ="SellsInProfit"              "   "+DoubleToStr(PosSellProfit,2)+"";
+      string k900 ="SellStop      "              "  "+OPSellStop+"" ;
+    //  string k900 ="Highest Sell"        "   "+DoubleToStr(HighestSell,Digits)+" #"+DoubleToStr(HighestSellTicket,0)+"  Profit: "+DoubleToStr(HighestSellProfit,2)+"";
+     // string k1000 ="Lowest Sell  "          "  "+DoubleToStr(LowestSell,Digits)+" #"+DoubleToStr(LowestSellTicket,0)+"  Profit: "+DoubleToStr(LowestSellProfit,2)+"";
+      string k1100 ="BP+SP        "             "   "+DoubleToStr(PosSellProfit+PosBuyProfit,2)+"";
+      string k1200 ="BuyProfit    "             "    "+DoubleToStr(BuyProfit,2)+"";
+      string k1300 ="SellProfit    "             "    "+DoubleToStr(SellProfit,2)+"";
+
+
+      Write1("pmk_17", 0, 0, 110, 30, k100, 9, "Vedrana", White);//bez ovoga ne prikazuje prvi red kada je backlabel na true a to sluzi da su candle iza labela
+      Write1("pmk_1", 0, 0, 110, 30, k100, 9, "Vedrana", White);
+      Write1("pmk_2", 0, 0, 110, 50, k200, 9, "Vedrana", Yellow);
+      Write1("pmk_3", 0, 0, 110, 70, k1200, 11, "Vedrana", DodgerBlue);
+      Write1("pmk_4", 0, 0, 110, 90, k300, 11, "Vedrana", DodgerBlue);
+      Write1("pmk_5", 0, 0, 110, 110, k400, 11, "Vedrana", DodgerBlue);
+     // Write1("pmk_6", 0, 0, 110, 130, k500, 11, "Vedrana", DodgerBlue);
+      Write1("pmk_7", 0, 0, 110, 150, k600, 9, "Vedrana", White);
+      Write1("pmk_8", 0, 0, 110, 170, k700, 9, "Vedrana", Yellow);
+      Write1("pmk_9", 0, 0, 110, 190, k1300, 11, "Vedrana", Red);
+      Write1("pmk_10", 0, 0, 110, 210, k800, 11, "Vedrana", Red);
+      Write1("pmk_11", 0, 0, 110, 230, k900, 11, "Vedrana", Red);
+    //  Write1("pmk_12", 0, 0, 110, 250, k1000, 11, "Vedrana", Red);
+      Write1("pmk_13", 0, 0, 110, 270, k1100, 11, "Vedrana", Orange);
+
+     }//value to togle==0
+//---------------------------------------------
+//brisanje pozadinskog labela i vrjednosti kod auomatskog trejda
+   if(value_to_toggle==1&&  Trade_Type!=11)
+     {
+      FrameLB(0,0,0,0,0);
+      FrameLBS(0,0,0,0,0);
+      Write1("pmk_17", 0, 0, 110, 30, "", 9, "Vedrana", White);
+      Write1("pmk_1", 0, 0, 110, 30, "", 9, "Vedrana", White);
+      Write1("pmk_2", 0, 0, 110, 50, "", 9, "Vedrana", Yellow);
+      Write1("pmk_3", 0, 0, 110, 70, "", 11, "Vedrana", DodgerBlue);
+      Write1("pmk_4", 0, 0, 110, 90, "", 11, "Vedrana", DodgerBlue);
+      Write1("pmk_5", 0, 0, 110, 110, "", 11, "Vedrana", DodgerBlue);
+      Write1("pmk_6", 0, 0, 110, 130, "", 9, "Vedrana", White);
+      Write1("pmk_7", 0, 0, 110, 150, "", 9, "Vedrana", Yellow);
+      Write1("pmk_8", 0, 0, 110, 170, "", 11, "Vedrana", Red);
+      Write1("pmk_9", 0, 0, 110, 190, "", 11, "Vedrana", Red);
+      Write1("pmk_10", 0, 0, 110, 210, "", 11, "Vedrana", Red);
+      Write1("pmk_11", 0, 0, 110, 250, "", 11, "Vedrana", Orange);
+      Write1("pmk_12", 0, 0, 110, 250, "", 11, "Vedrana", Red);
+      Write1("pmk_13", 0, 0, 110, 270, "", 11, "Vedrana", Orange);
+     }//if value to togle==1
+
+//*******************************************************************************************************************
+
+//------------------------------------------ indikatori za rucni trejd
+//--------------------------------------------------------------------
+   if(RightSideLabel)
+     {
+      // -----------------Chard Profit-----------
+
+      double SesProfit=SessionProfitC();
+      string textChard;
+      color cl2;
+      double ChardProfit;
+      ChardProfit=SesProfit;
+      trenutniProfit=SesProfit;
+      if(returnValueC ==0)
+        {
+         textChard = +ChardProfit+" $";
+         cl2=Yellow;
+        }
+      if(returnValueC>0)
+        {
+         textChard = +ChardProfit+" $";
+         cl2=Lime;
+        }
+      if(returnValueC<0)
+        {
+         textChard = +ChardProfit+" $";
+         cl2= Red;
+        }
+        {
+         ObjectDelete("pmk__CHprofit");
+         if(ObjectFind("pmk__CHprofit")!=0)
+           {
+            ObjectCreate("pmk__CHprofit",OBJ_LABEL,0,0,0);
+            ObjectSet("pmk__CHprofit",OBJPROP_CORNER,3);//4
+            ObjectSet("pmk__CHprofit",OBJPROP_XDISTANCE,10);//200
+            ObjectSet("pmk__CHprofit",OBJPROP_YDISTANCE,60);//105
+            ObjectSetText("pmk__CHprofit",""+Symbol()+" "+DoubleToStr(ChardProfit,2)+"  ",12,"Arial",cl2);
+           }
+         else
+           {
+            ObjectDelete("pmk__CHprofit");
+           }
+        }
+      //--
+      //-- float--------------display-----
+
+      Float = BuyProfit+SellProfit;
+      if(Float < LowestFloat)
+        {
+         LowestFloat = Float;
+        }
+      if(Float> HighestFloat)
+        {
+         HighestFloat = Float;
+        }
+
+      // Dohvatite vrijednosti koje želite prikazati
+      double currentFloat = Float;
+      double maxFloat = LowestFloat;
+
+      Write2("pmk_1010Float",3,15,45,"Float: "+DoubleToString(currentFloat, 1)+"  MinFloat: "+DoubleToString(maxFloat, 1)  +" ",10,"Vedana",White);
+      //--------------------------------------------------------------------------------//
+      //------------------------------display za total profit && total float -----------//
+      //---------------------------------------------------------------------------------//
+
+      Assign_Symbols2();
+
+      totlots2 =0.0;
+      tottrades2 = 0.0;
+      totopnl2 =0.0;
+      totcpnl2 =0.0;
+
+      for(int qt2 =0;  t <=20; qt2++)
+        {
+         if(StringLen(symbols2[qt2])==0)
+            break;
+         if(MagicNumber>0)
+           {
+            Output_Row2(qt2, symbols2[qt2]);  //za reset ako stavimo magic==0
+           }
+        }
+      int row2 = qt2;
+      Rows2=row2;
+
+      // SetLabel2("objClosedPnL" + row2, DoubleToStr(totcpnl2+totopnl2-OrderCommission()-OrderSwap(),2), White, 50+xdist, 30+ydist + (row2 + 2)*14,4,12);
+      Write2("pmk_1011Total",3,0,10,"Total Profit: "" "" ",10,"Vedana",White);
+      color bojaTotal;
+      //double TotalProfit2=totcpnl2+totopnl2-OrderCommission()-OrderSwap();
+      double TotalProfit2=totcpnl2+totopnl2;//otvoreni+zatvoreni nalozi+float
+
+      if(TotalProfit2==0)
+        {
+         bojaTotal=Yellow;
+        }
+      else
+         if(TotalProfit2<0)
+           {
+            bojaTotal=Red;
+           }
+         else
+            if(TotalProfit2>0)
+              {
+               bojaTotal=Lime;
+              }
+      // if (TotalProfit2>0){
+      Write2("pmk_1012TotalProfit",3,95,8," "+DoubleToStr(TotalProfit2,2)+"  "" ",10,"Vedana",bojaTotal); //}
+      Write2("pmk_1013TotalFloat",3,0,25,"Total Float: "" "" ",10,"Vedana",White);
+      color bojaTotalFloat;
+      if(totopnl2==0)
+        {
+         bojaTotalFloat=Yellow;
+        }
+      else
+         if(totopnl2<0)
+           {
+            bojaTotalFloat=Red;
+           }
+         else
+            if(totopnl2>0)
+              {
+               bojaTotalFloat=Lime;
+              }
+      Write2("pmk_1014TotalFloat",3,95,25," "+DoubleToStr(totopnl2,2)+"  "" ",10,"Vedana",bojaTotalFloat);
+      Write2("pmk_1015Linija",3,0,35,"--------------------------- ""  "" ",12,"Vedana",Yellow);
+
+      //----------MidPoint linija
+
+      if(ObjectFind("MidPoint") != 0)
+        {
+         ObjectCreate("MidPoint", OBJ_HLINE, 0, Time[0], MidPoint);
+         ObjectSet("MidPoint", OBJPROP_COLOR, Gold);
+         ObjectSet("MidPoint", OBJPROP_WIDTH, 2);
+         ObjectSet("MidPoint", OBJPROP_BACK, true);//sa ovim se prikazuje iza back labela inace je ispred
+        }
+      else
+        {
+         ObjectMove("MidPoint", 0, Time[0], MidPoint);
+        }
+      //--
+     }//if right side label
+//-------------------
+
+//--spread
+
+   current_spread=(SymbolInfoDouble(Symbol(),SYMBOL_ASK)-SymbolInfoDouble(Symbol(),SYMBOL_BID))/Point*0.1;
+
+   if(current_spread > max_spread)
+     {
+      max_spread = current_spread;
+     }
+   if(current_spread< min_spread)
+     {
+      min_spread = current_spread;
+     }
+   if(min_spread==0)
+     {
+      min_spread=current_spread;
+     }
+
+//-----------------------------------SPREAD Display----&&Stop Spread stop signal----------------------------------------
+   if(current_spread<MaxSpread)
+     {SpreadStop= false ; }
+   else
+     {
+      SpreadStop=true;
+     }
+
+   if(current_spread>MaxSpread&& BuyOrders==0 && SellOrders==0)
+     { Write1("pmk_100",0,0,110,5,"Spread is to high. "+current_spread+" "" Trade DISABLED",9,"Vedana",Red);}
+   else
+      if(current_spread>MaxSpread&& (BuyOrders>0 || SellOrders>0))
+        { Write1("pmk_100",0,0,110,5,"Spread is to high. "+current_spread+" "" Trade PAUSED",9,"Vedana",Red); }
+      else
+         if(current_spread<MaxSpread)
+           { Write1("pmk_100",0,0,110,5,"SPREAD  "+current_spread+" "" ",9,"Vedana",Lime);}
+
+
+
+//+------------------------------------------------Session Profit stop--------------------------
+   if(SesProfit>=SessionTarget&&SessionTarget>0)
+     {
+      ExitAllTrades(Aqua, "Session Target Achieved. YUHUUI!");
+      SessionTargetStop=true;
+      if(ObjectFind("pmk_Session")!=0)
+        {
+         ObjectCreate("pmk_Session",OBJ_LABEL,0,0,0);
+         ObjectSet("pmk_Session",OBJPROP_CORNER,3);
+         ObjectSet("pmk_Session",OBJPROP_XDISTANCE,300);
+         ObjectSet("pmk_Session",OBJPROP_YDISTANCE,300);
+        }
+      else
+        {
+         ObjectSetText("pmk_Session"," Trade Stop Session Target Reached "+SessionTarget+"  ",20,"Arial Bold",Lime);
+        }
+      //---------
+     }
+   else
+      if(SessionTarget==0)
+        {
+         SessionTargetStop=false;
+         if(ObjectFind("pmk_Session")!=0)
+           {
+            ObjectDelete("pmk_Session");
+           }
+        }
+//------------------------------------------------------        
+//-----------------------TradeType-------------Display--
+//------------------------------------------------------
+   if(ManualButtons==false)
+     {
+      string TradeType;
+  
+      if(Trade_Type_==11)
+        {
+         TradeType=" Pending_Mode    ";
+        }  
+      //---------------------------------
+        { Write1("pmk_101",0,0,110,20,"TradeType : "+TradeType+" "" ",9,"Vedana",Orange); }
+
+
+     }
+   if(ManualButtons==true)
+     {    Write1("pmk_101",0,0,110,20," "" "" ",9,"Vedana",Orange); }
+//---------------------------------EA name ---------------------
+//--------------------------------------------------------------
+   color pitura;
+   if(ChardProfit >0)
+     {
+      pitura=Lime;
+     }
+   else
+      if(ChardProfit <0)
+        {
+         pitura=Red;
+        }
+      else
+         if(ChardProfit ==0)
+           {
+            pitura=Yellow;
+           }
+     { Write1("pmk_102",0,0,10,5,""+EA_name+" "" ",12,"Arial Bold",pitura); }
+//---------------------------------
+
+     /*        //--------------------------------------------------------------------------
+      //-----------------------------------TEST Display poruka------------------
+   //-----------------------------------------------------------------------
+ 
+ 
+ 
+   
+      if(ObjectFind("pmk_Di")!=0)
+        {
+          ObjectCreate("pmk_Di",OBJ_LABEL,0,0,0);
+         ObjectSet("pmk_Di",OBJPROP_CORNER,3);
+         ObjectSet("pmk_Di",OBJPROP_XDISTANCE,700);
+         ObjectSet("pmk_Di",OBJPROP_YDISTANCE,250);
+        }
+      else
+        {
+         ObjectSetText("pmk_Di"," BuySpacing "+currentBuySpacing+" SellOrders "+SellOrders+" SellSpacing "+currentSellSpacing +"BuyOrders "+BuyOrders +"  ",10,"Arial Bold",Lime);
+        }
+ */ //--------------------------------------------------------------------------
+
+//---------------------------------------------------
+//------------------------indicator profit multichard
+//----------------------------------------------------
+
+//-----------------------------------
+   /*
+   if(ManualButtons==false)
+
+   {
+   if (MultichardDisplay==true){
+   */
+
+//***********************************************************************************************************
+   Assign_Symbols();
+
+//*********************************************************************************************************
+
+   totlots =0.0;
+   tottrades = 0.0;
+   totopnl =0.0;
+   totcpnl =0.0;
+
+   for(int qt =0;  t <=20; qt++)
+     {
+      if(StringLen(symbols[qt])==0)
+         break;
+      if(MagicNumber>0)
+        {
+         Output_Row(qt, symbols[qt]);  //za reset ako stavimo magic==0
+        }
+     }
+
+//------------------dodana boja---------------------
+   color colorFloat,colorClosed;
+   if(totopnl<0)
+     {
+      colorFloat=Red;
+     }
+   else
+     {
+      colorFloat=White;
+     }
+   if(totcpnl+totopnl >0)
+     {
+      colorClosed=Lime;
+     }
+   if(totcpnl+totopnl ==0)
+     {
+      colorClosed=White;
+     }
+   if(totcpnl+totopnl <0)
+     {
+      colorClosed=Red;
+     }
+//---------------------------------------
+
+   if(tottrades>MaxOrders)
+     {
+      MaxOrders=tottrades;
+     }
+   if(totlots >MaxLots)
+     {
+      MaxLots=totlots;
+     }
+   if(totopnl <MinFloat)
+     {
+      MinFloat=totopnl;
+     }
+   if(totcpnl+totopnl>MaxPrMtch)
+     {
+      MaxPrMtch = totcpnl+totopnl;
+     }
+   int row = qt;
+   Rows=row;
+//--
+   if(ManualButtons==false)
+
+     {
+      if(MultichardDisplay==true)
+        {
+         if(MagicNumber>0)
+           {
+
+            //--
+
+            //---red za Symbols oznake
+            SetLabel("objSymbol", "Symbol", Orange, 300+xdist, 25+ydist);//DimGray
+            SetLabel("objTrades", "Ord   ", Orange, 250+xdist, 25+ydist);
+            SetLabel("objLots", "Lots", Orange, 190+xdist, 25+ydist);
+            SetLabel("objFloat", "Float", Orange, 120+xdist, 25+ydist);
+            SetLabel("objClosedPnL", "Profit", Orange, 50+xdist, 25+ydist);
+            if(Rows>0)
+              {
+
+               //red za TOTAL orders
+               SetLabel2("objSymbol" + row, "Totals", White, 300+xdist, 30+ydist+ (row + 2)*14,4,11);
+               SetLabel2("objTrades" + row, DoubleToStr(tottrades,0), White, 255+xdist, 30+ydist + (row + 2)*14,4,11);
+               SetLabel2("objLots" + row, DoubleToStr(totlots,2), White, 190+xdist, 30+ydist + (row + 2)*14,4,11);
+               SetLabel2("objFloat" + row, DoubleToStr(totopnl,2), colorFloat, 120+xdist, 30+ydist + (row + 2)*14,4,11);
+               SetLabel2("objClosedPnL" + row, DoubleToStr(totcpnl+totopnl-OrderCommission()-OrderSwap(),2), colorClosed, 50+xdist, 30+ydist + (row + 2)*14,4,12);
+
+               //---red za MAXIMUM orders
+               SetLabel2("objMax"+ row+row, "Maximum", Orange, 300+xdist, 25+ydist+ (row+1)*14,4,11); //dodan jos jedan red za ocitanje
+               SetLabel2("objMaxOrders" + row+row, """"+MaxOrders+"     ", Orange, 255+xdist, 25+ydist+ (row+1)*14,4,11);//dodan jos jedan red za ocitanje
+               SetLabel2("objMaxLots" + row+row, ""+DoubleToStr(MaxLots,2)+" ", Orange, 190+xdist, 25+ydist+ (row+1)*14,4,11);//dodan jos jedan red za ocitanje
+               SetLabel2("objMaxFloat" + row+row, ""+DoubleToStr(MinFloat,2)+"", Orange, 120+xdist, 25+ydist+ (row+1)*14,4,11);//dodan jos jedan red za ocitanje
+               SetLabel2("objMaxClosedPnL" + row+row, ""+ DoubleToStr(MaxPrMtch,2)+"", Orange, 50+xdist, 25+ydist+ (row+1)*14,4,11); //dodan jos jedan red za ocitanje
+              }
+            return(Rows);
+
+
+            if(MagicNumber<=0)
+              {
+               MaxOrders=0;
+               MaxLots=0;
+               MinFloat=0;
+               MaxPrMtch=0;
+               tottrades=0;
+               totlots=0;
+               totopnl=0;
+               totcpnl=0;
+               totopnl=0;
+               Rows=0;
+              }
+
+           }//dodano za indicator multiprofit
+
+        }//multichard display true false
+
+     }//multichard display true false
+
+   return(0);
+  }
+//--------------------------------
+//-------------KRAJ START FUNKCIJE
+
+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void Write(string String)
+  {
+   int Handle;
+
+   if(!Auditing)
+      return;
+
+   Handle = FileOpen(Filename, FILE_READ|FILE_WRITE|FILE_CSV, "/t");
+   if(Handle < 1)
+     {
+      Print("Error opening audit file: Code ", GetLastError());
+      return;
+     }
+
+   if(!FileSeek(Handle, 0, SEEK_END))
+     {
+      Print("Error seeking end of audit file: Code ", GetLastError());
+      return;
+     }
+
+   if(FileWrite(Handle, TimeToStr(CurTime(), TIME_DATE|TIME_SECONDS) + "  " + String) < 1)
+     {
+      Print("Error writing to audit file: Code ", GetLastError());
+      return;
+     }
+
+   FileClose(Handle);
+  }
+//---------------------------------------------------
+//-----------------------------SIGNAL TRADE DIRECTION
+//---------------------------------------------------
+
+
+
+//-------------------------------------------------
+double SessionProfit()
+  {
+   double profitHistory;
+   double profitOpenP;
+   double returnValue;
+
+   for(int i = OrdersHistoryTotal()-1; i>=0; i--)
+     {
+      dummyResult=OrderSelect(i,SELECT_BY_POS,MODE_HISTORY);
+      if(OrderSymbol()==Symbol() && OrderMagicNumber()==MagicNumber)
+        {
+         if(OrderComment()==TradeComment)
+           {
+            profitHistory +=OrderProfit();
+           }
+        }
+     }
+
+   for(int j=OrdersTotal()-1; j>=0; j--)
+     {
+      dummyResult=OrderSelect(j,SELECT_BY_POS,MODE_TRADES);
+      if(OrderSymbol()==Symbol() && OrderMagicNumber()==MagicNumber)
+        {
+         if(OrderComment()==TradeComment)
+           {
+            profitOpenP +=OrderProfit();
+           }
+        }
+     }
+
+   returnValue=profitHistory+profitOpenP;
+   return(returnValue);
+  }
+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void ExitAllTrades(color Color, string reason)
+  {
+   bool success;
+   for(int cnt = OrdersTotal() - 1; cnt >= 0; cnt --)
+     {
+      dummyResult=OrderSelect(cnt, SELECT_BY_POS, MODE_TRADES);
+      if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber)
+        {
+         success=OrderClose(OrderTicket(), OrderLots(), OrderClosePrice(), Slippage, Color);
+         if(success==true)
+           {
+            Print("Closed all positions because ",reason);
+           }
+        }
+     }
+  }
+//----------------------------------------------------------------------------------------
+//-----------------MANUAL BUTTONS----------------------------------------------------------
+//----------------------------------------------------------------------------------------
+void OnChartEvent(const int id,const long &lparm,const double &dparm,const string &sparm)
+  {
+  // int ticket;
+   if(id==CHARTEVENT_OBJECT_CLICK)
+     {
+      if(sparm =="BuyButton")
+        {
+        // ticket= OrderSend(_Symbol,OP_BUY,ManualLots,Ask,Slippage,0,0,TradeComment,MagicNumber,Yellow);
+         
+          PlaceManualBuyOrder(ManualLots,ManualTrade_SL);
+          
+        }
+     //--   
+      if(sparm =="SellButton")
+        {
+          //ticket= OrderSend(_Symbol,OP_SELL,ManualLots,Bid,Slippage,0,0,TradeComment,MagicNumber,Yellow);
+           PlaceManualSellOrder(ManualLots,ManualTrade_SL);
+        }
+    //--    
+      if(sparm =="UP")
+        {
+         ManualLots=manualLots+ManualLots;
+        }
+      if(sparm =="DOWN")
+        {
+         ManualLots=ManualLots-manualLots;
+         if(ManualLots<=0)
+            ManualLots=0;
+        }
+
+      if(sparm =="CloseSellInProfit")
+        {
+         //CloseSellsInProfit=true;
+         CloseSellsInProfit();
+        }
+      else
+        {
+         CloseSellsInProfit=false;
+        }
+      if(sparm =="CloseSellAll")
+        {
+         // CloseSells =true;
+         CloseAllThisSymbolSell();
+        }
+
+
+      else
+        {
+         CloseSells =false;
+        }
+      //--
+      if(sparm =="CloseBuyProfit")
+        {
+         // CloseBuysInProfit=true;
+         CloseBuysInProfit();
+        }
+      else
+        {
+         CloseBuysInProfit=false;
+        }
+      if(sparm =="CloseBuyAll")
+        {
+         // CloseBuys =true;}
+         CloseAllThisSymbolBuy();
+        }
+      else
+        {
+         CloseBuys =false;
+        }
+       //--------------------- 
+      //-------------PENDINGS
+      ///--------------------
+      if(sparm =="BuyStop")
+        {
+         if(pendingSL>0)
+           {
+            double bSL=(Ask+PendingSpacing*Point-pendingSL*Point);
+           }
+         else
+            bSL=0;
+         if(pendingTP>0)
+           {
+            double bTP= (Ask+PendingSpacing*Point+pendingTP*Point);
+           }
+         else
+            bTP=0;
+         int  bes=OrderSend(Symbol(), OP_BUYSTOP,(PendingLots), Ask+PendingSpacing*Point, 3,bSL,bTP, "", MagicNumber, 0, Blue);
+        }
+
+      if(sparm =="SellLimit")
+        {
+         int res;
+         if(pendingSL>0)
+           {
+            double sSL= (Bid+PendingSpacing*Point+pendingSL*Point);
+           }
+         else
+            sSL=0;
+         if(pendingTP>0)
+           {
+            double sTP =(Bid+PendingSpacing*Point-pendingTP*Point);
+           }
+         else
+            sTP=0;
+         res=OrderSend(Symbol(), OP_SELLLIMIT,PendingLots, Bid+PendingSpacing*Point, 3, sSL,sTP, "", MagicNumber, 0, Red);
+        }
+      //--
+      if(sparm=="PendingClose")
+        {
+         bool  dummyResult2,dummyResult3,dummyResult4;
+         RefreshRates();
+
+         for(Order=OrdersTotal()-1; Order>=0; Order--)
+           {
+            if(OrderSelect(Order,SELECT_BY_POS,MODE_TRADES))
+              {
+               if(OrderSymbol()==Symbol() && OrderMagicNumber()==MagicNumber && OrderType()==OP_BUYSTOP)
+                 {
+                  if((TimeCurrent()-OrderOpenTime()>=0))
+                     dummyResult=OrderDelete(OrderTicket(),Green);//IsTesting() ||
+                 }
+               if(OrderSymbol()==Symbol() && OrderMagicNumber()==MagicNumber && OrderType()==OP_SELLSTOP)
+                 {
+                  if((TimeCurrent()-OrderOpenTime()>=0))
+                     dummyResult2=OrderDelete(OrderTicket(),Green);//IsTesting() ||
+                 }
+               if(OrderSymbol()==Symbol() && OrderMagicNumber()==MagicNumber && OrderType()==OP_BUYLIMIT)
+                 {
+                  if((TimeCurrent()-OrderOpenTime()>=0))
+                     dummyResult3=OrderDelete(OrderTicket(),Green);//IsTesting() ||
+                 }
+               if(OrderSymbol()==Symbol() && OrderMagicNumber()==MagicNumber && OrderType()==OP_SELLLIMIT)
+                 {
+                  if((TimeCurrent()-OrderOpenTime()>=0))
+                     dummyResult4=OrderDelete(OrderTicket(),Green);//IsTesting() ||
+                 }
+
+               Error=GetLastError();
+               if(Error!=0)
+                  Write("Error closing SELL order "+OrderTicket()+": "+ErrorDescription(Error)+" (B"+Error+")  Lots:"+OrderLots()+"  Ask:"+MarketInfo(OrderSymbol(),MODE_ASK));
+              }
+            //    }
+            //  }
+            //  }
+            //  }
+           }
+         return;
+        }
+      //--
+      if(sparm=="PendingLots+")
+        {
+         PendingLots=pendingLots+PendingLots;
+        }
+      //------------------
+      if(sparm=="PendingLots-")
+        {
+         PendingLots=PendingLots-pendingLots;
+         if(PendingLots<=0)
+            PendingLots=0;
+        }
+      //--PendingSpacing PendingSpacing
+        if(sparm=="PendingSpacing")
+        {
+         PendingSpacing=pendingSpacing;
+        }
+      //--    
+      if(sparm=="Spacing+")
+        {
+         PendingSpacing=PendingSpacing+pendingSpacing;
+        }
+      //--
+      if(sparm=="Spacing-")
+        {
+         PendingSpacing=PendingSpacing-pendingSpacing;
+         if(PendingSpacing<=pendingSpacing)
+            PendingSpacing=pendingSpacing;
+        }
+      //--
+      if(sparm=="BuyLimit")
+        {
+       int es;
+         if(pendingSL>0)
+           {
+            double bbSL= (Ask-PendingSpacing*Point-pendingSL*Point);
+           }
+         else
+            bbSL=0;
+         if(pendingTP>0)
+           {
+            double bbTP =(Ask-PendingSpacing*Point+pendingTP*Point);
+           }
+         else
+            bbTP=0;
+         es=OrderSend(Symbol(), OP_BUYLIMIT,PendingLots, Ask-PendingSpacing*Point, 3,bbSL,bbTP, "", MagicNumber, 0, Blue);
+        
+        // PlacePendingBuyLimit();
+       //  ManualBuyLimit();
+        }
+      //--
+      if(sparm=="SellStop")
+        {
+         int yres;
+         if(pendingSL>0)
+           {
+            double ssSL= (Bid-PendingSpacing*Point+pendingSL*Point);
+           }
+         else
+            ssSL=0;
+         if(pendingTP>0)
+           {
+            double ssTP =(Bid-PendingSpacing*Point-pendingTP*Point);
+           }
+         else
+            ssTP=0;
+         yres=OrderSend(Symbol(), OP_SELLSTOP,PendingLots, Bid-PendingSpacing*Point, 3,ssSL,ssTP, "", MagicNumber, 0, Red);
+        }
+      //--
+      if(sparm=="Display")
+        {
+         //----------button za vizualno gasenje
+
+         value_to_toggle = !value_to_toggle;
+
+        }
+      //--
+      //--
+      if(sparm=="Alarm")
+        {
+         //----------button za vizualno gasenje
+
+         value_to_toggle2 = !value_to_toggle2;
+
+        }
+      //--
+      //--
+      if(sparm=="CloseMultichard")//----------button za gasenje svih naloga na svim kartama
+        {
+         ExitAllTradesMultichard(Lime,"Manual Closed Multichard Orders");
+        }
+
+      if(sparm=="CloseALLSymbolsALLChard")//----------button za gasenje svih naloga na svim kartama
+        {
+         ExitAllTradesMultichard(Lime,"Manual Closed Multichard Orders");
+        }
+
+
+
+
+      if(sparm=="ManualLots+")
+        {
+         ManualLots=ManualLots+manualLots*10;
+        }
+      //--
+      if(sparm=="ManualLots-")
+        {
+         ManualLots=ManualLots-manualLots*10;
+         if(ManualLots<=0)
+            ManualLots=0;
+        }
+      //--
+      if(sparm=="Reset")
+        {
+         ManualLots=0;
+         if(ManualLots<=0)
+            ManualLots=0;
+        }
+
+      //--
+      if(sparm=="CloseHighestBuy")
+        {
+         // CloseHighestBuy();
+         CloseHighestBuy1=true;
+         RefreshRates();
+        }
+      //--
+      if(sparm=="CloseLowestBuy")
+        {
+         // CloseLowestBuy();
+         CloseLowestBuy1=true;
+         RefreshRates();
+        }
+
+      //--
+      if(sparm=="CloseHighestSell")
+        {
+         // CloseHighestSell();
+         CloseHighestSell1=true;
+         RefreshRates();
+        }
+      //--
+      if(sparm=="CloseLowestSell")
+        {
+         // CloseLowestSell();
+         CloseLowestSell1=true;
+         RefreshRates();
+        }
+      //--manual profit target
+
+      if(sparm=="ProfitTarget")
+        {
+         ManualProfitTargetSet=ManualProfitTarget;
+         if(ManualProfitTarget<=0)
+            ManualProfitTarget=0;
+
+
+        }
+      //--
+      if(sparm=="ProfitTargetReset")
+        {
+         ManualProfitTarget=0;
+         ManualProfitTargetSet=0;
+         if(ManualProfitTarget<=0)
+            ManualProfitTarget=0;
+         SetBoja=NoSet;
+        }
+      //--
+      if(sparm =="ProfitTargetUP")
+        {
+         ManualProfitTarget=ManualProfitTarget +0.1;
+         if(ManualProfitTarget>ManualProfitTargetSet)
+           {ManualProfitTargetSet=0;}
+
+        }
+      //-
+      if(sparm =="ProfitTargetDOWN")
+        {
+         ManualProfitTarget=ManualProfitTarget-0.1;
+         if(ManualProfitTarget<=0)
+            ManualProfitTarget=0;
+         if(ManualProfitTarget<ManualProfitTargetSet)
+           {ManualProfitTargetSet=0;}
+        }
+      //--
+      if(sparm =="ProfitTargetLots+")
+        {
+         ManualProfitTarget=ManualProfitTarget +1;
+         if(ManualProfitTarget>ManualProfitTargetSet)
+           {ManualProfitTargetSet=0;}
+        }
+      //-
+      if(sparm =="ProfitTargetLots-")
+        {
+         ManualProfitTarget=ManualProfitTarget-1;
+         if(ManualProfitTarget<=0)
+            ManualProfitTarget=0;
+         if(ManualProfitTarget<ManualProfitTargetSet)
+           {ManualProfitTargetSet=0;}
+        }
+      //--
+      if(sparm =="ProfitTargetLots1+")
+        {
+         ManualProfitTarget=ManualProfitTarget +10;
+         if(ManualProfitTarget>ManualProfitTargetSet)
+           {ManualProfitTargetSet=0;}
+        }
+      //-
+      if(sparm =="ProfitTargetLots1-")
+        {
+         ManualProfitTarget=ManualProfitTarget-10;
+         if(ManualProfitTarget<=0)
+            ManualProfitTarget=0;
+         if(ManualProfitTarget<ManualProfitTargetSet)
+           {ManualProfitTargetSet=0;}
+        }
+      //--
+
+      //--manual profit secure
+
+      if(sparm=="SecureProfit")
+        {
+         SecureProfitSet=SecureProfit;
+         if(SecureProfit<=0)
+            SecureProfitSet=0;
+
+
+        }
+      //--
+      if(sparm=="SecureProfitReset")
+        {
+         SecureProfit=0;
+         SecureProfitSet=0;
+         if(SecureProfit<=0)
+            SecureProfitSet=0;
+         SecureBoja=NoSec;
+        }
+      //--
+      if(sparm =="SecureProfitUP")
+        {
+         SecureProfit=SecureProfit +0.1;
+         if(SecureProfit>SecureProfitSet)
+           {SecureProfitSet=0;}
+
+        }
+      //-
+      if(sparm =="SecureProfitDOWN")
+        {
+         SecureProfit=SecureProfit-0.1;
+         if(SecureProfit<=0)
+            SecureProfit=0;
+         if(SecureProfit<SecureProfitSet)
+           {SecureProfitSet=0;}
+        }
+      //--
+      if(sparm =="SecureProfitLots+")
+        {
+         SecureProfit=SecureProfit +1;
+         if(SecureProfit>SecureProfitSet)
+           {SecureProfitSet=0;}
+        }
+      //-
+      if(sparm =="SecureProfitLots-")
+        {
+         SecureProfit=SecureProfit-1;
+         if(SecureProfit<=0)
+            SecureProfit=0;
+         if(SecureProfit<SecureProfitSet)
+           {SecureProfitSet=0;}
+        }
+      //--
+      if(sparm =="SecureProfitLots1+")
+        {
+         SecureProfit=SecureProfit +10;
+         if(SecureProfit>SecureProfitSet)
+           {SecureProfitSet=0;}
+        }
+      //-
+      if(sparm =="SecureProfitLots1-")
+        {
+         SecureProfit=SecureProfit-10;
+         if(SecureProfit<=0)
+            SecureProfit=0;
+         if(SecureProfit<SecureProfitSet)
+           {SecureProfitSet=0;}
+        }
+//----------------------------------------------------------
+
+
+//----------------TrailingSecureProfit
+    if(sparm=="TreilingSecureProfit")
+        {
+      
+        TreilingSecureProfitSet=TreilingSecureProfit;
+         if(TreilingSecureProfit<=0)
+            {TreilingSecureProfitSet=0;}
+      //  initialSecureProfitSet = true;
+        TreilingSecureBoja=SetTr;
+        }
+      //--
+      if(sparm=="TreilingSecureProfitReset")
+        {
+       
+         TreilingSecureProfit=0;
+         TreilingSecureProfitSet=0;
+        // if(TreilingSecureProfit<=0)
+        //    TreilingSecureProfitSet=0;
+            TreilingSecureBoja=NoSetTr;
+            profitTemp = 0; // Privremena varijabla za praćenje trenutnog profita
+            secureProfit = 0; // Početna vrijednost secure profita
+            lastSecureProfit = 0; // Zadnja povećana vrijednost secure profita
+            initialSecureProfitSet = false; // Indikator je li secure profit inicijalno postavljen
+            //Manual_SecureProfit_Treiling=false;
+        }
+      //--
+      if(sparm =="TreilingSecureProfitUP")
+        {
+         TreilingSecureProfit=TreilingSecureProfit +0.1;
+         if(TreilingSecureProfit>TreilingSecureProfitSet)
+           {TreilingSecureProfitSet=0;}
+
+        }
+      //-
+      if(sparm =="TreilingSecureProfitDOWN")
+        {
+         TreilingSecureProfit=TreilingSecureProfit-0.1;
+         if(TreilingSecureProfit<=0)
+            TreilingSecureProfit=0;
+         if(TreilingSecureProfit<TreilingSecureProfitSet)
+           {TreilingSecureProfitSet=0;}
+        }
+      //--
+      if(sparm =="TreilingSecureProfit+")
+        {
+         TreilingSecureProfit=TreilingSecureProfit +1;
+         if(TreilingSecureProfit>TreilingSecureProfitSet)
+           {TreilingSecureProfitSet=0;}
+        }
+      //-
+      if(sparm =="TreilingSecureProfit-")
+        {
+         TreilingSecureProfit=TreilingSecureProfit-1;
+         if(TreilingSecureProfit<=0)
+            TreilingSecureProfit=0;
+         if(TreilingSecureProfit<TreilingSecureProfitSet)
+           {TreilingSecureProfitSet=0;}
+        }
+      //--
+      if(sparm =="TreilingSecureProfit1+")
+        {
+         TreilingSecureProfit=TreilingSecureProfit +10;
+         if(TreilingSecureProfit>TreilingSecureProfitSet)
+           {TreilingSecureProfitSet=0;}
+        }
+      //-
+      if(sparm =="TreilingSecureProfit1-")
+        {
+         TreilingSecureProfit=TreilingSecureProfit-10;
+         if(TreilingSecureProfit<=0)
+            TreilingSecureProfit=0;
+         if(TreilingSecureProfit<TreilingSecureProfitSet)
+           {TreilingSecureProfitSet=0;}
+        }
+//--------------------------------------------------------
+
+      //--manual secureBUYprofit
+
+      if(sparm=="SecureBUYProfit")
+        {
+         SecureBUYProfitSet=SecureBUYProfit;
+         if(SecureBUYProfit<=0)
+            SecureBUYProfitSet=0;
+
+
+        }
+      //--
+      if(sparm=="SecureBUYProfitReset")
+        {
+         SecureBUYProfit=0;
+         SecureBUYProfitSet=0;
+         if(SecureBUYProfit<=0)
+            SecureBUYProfitSet=0;
+         SecureBUYBoja=BUYNoSec;
+        }
+      //--
+      if(sparm =="SecureBUYProfitUP")
+        {
+         SecureBUYProfit=SecureBUYProfit +0.1;
+         if(SecureBUYProfit>SecureBUYProfitSet)
+           {SecureBUYProfitSet=0;}
+
+        }
+      //-
+      if(sparm =="SecureBUYProfitDOWN")
+        {
+         SecureBUYProfit=SecureBUYProfit-0.1;
+         if(SecureBUYProfit<=0)
+            SecureBUYProfit=0;
+         if(SecureBUYProfit<SecureBUYProfitSet)
+           {SecureBUYProfitSet=0;}
+        }
+      //--
+      if(sparm =="SecureBUYProfitLots+")
+        {
+         SecureBUYProfit=SecureBUYProfit +1;
+         if(SecureBUYProfit>SecureBUYProfitSet)
+           {SecureBUYProfitSet=0;}
+        }
+      //-
+      if(sparm =="SecureBUYProfitLots-")
+        {
+         SecureBUYProfit=SecureBUYProfit-1;
+         if(SecureBUYProfit<=0)
+            SecureBUYProfit=0;
+         if(SecureBUYProfit<SecureBUYProfitSet)
+           {SecureBUYProfitSet=0;}
+        }
+      //--
+      if(sparm =="SecureBUYProfitLots1+")
+        {
+         SecureBUYProfit=SecureBUYProfit +10;
+         if(SecureBUYProfit>SecureBUYProfitSet)
+           {SecureBUYProfitSet=0;}
+        }
+      //-
+      if(sparm =="SecureBUYProfitLots1-")
+        {
+         SecureBUYProfit=SecureBUYProfit-10;
+         if(SecureBUYProfit<=0)
+            SecureBUYProfit=0;
+         if(SecureBUYProfit<SecureBUYProfitSet)
+           {SecureBUYProfitSet=0;}
+        }
+
+      //--manual secureSELLprofit
+
+      if(sparm=="SecureSELLProfit")
+        {
+         SecureSELLProfitSet=SecureSELLProfit;
+         if(SecureSELLProfit<=0)
+            SecureSELLProfitSet=0;
+
+
+        }
+      //--
+      if(sparm=="SecureSELLProfitReset")
+        {
+         SecureSELLProfit=0;
+         SecureSELLProfitSet=0;
+         if(SecureSELLProfit<=0)
+            SecureSELLProfitSet=0;
+         SecureSELLBoja=SELLNoSec;
+        }
+      //--
+      if(sparm =="SecureSELLProfitUP")
+        {
+         SecureSELLProfit=SecureSELLProfit +0.1;
+         if(SecureSELLProfit>SecureSELLProfitSet)
+           {SecureSELLProfitSet=0;}
+
+        }
+      //-
+      if(sparm =="SecureSELLProfitDOWN")
+        {
+         SecureSELLProfit=SecureSELLProfit-0.1;
+         if(SecureSELLProfit<=0)
+            SecureSELLProfit=0;
+         if(SecureSELLProfit<SecureSELLProfitSet)
+           {SecureSELLProfitSet=0;}
+        }
+      //--
+      if(sparm =="SecureSELLProfitLots+")
+        {
+         SecureSELLProfit=SecureSELLProfit +1;
+         if(SecureSELLProfit>SecureSELLProfitSet)
+           {SecureSELLProfitSet=0;}
+        }
+      //-
+      if(sparm =="SecureSELLProfitLots-")
+        {
+         SecureSELLProfit=SecureSELLProfit-1;
+         if(SecureSELLProfit<=0)
+            SecureSELLProfit=0;
+         if(SecureSELLProfit<SecureSELLProfitSet)
+           {SecureSELLProfitSet=0;}
+        }
+      //--
+      if(sparm =="SecureSELLProfitLots1+")
+        {
+         SecureSELLProfit=SecureSELLProfit +10;
+         if(SecureBUYProfit>SecureBUYProfitSet)
+           {SecureSELLProfitSet=0;}
+        }
+      //-
+      if(sparm =="SecureSELLProfitLots1-")
+        {
+         SecureSELLProfit=SecureSELLProfit-10;
+         if(SecureSELLProfit<=0)
+            SecureSELLProfit=0;
+         if(SecureSELLProfit<SecureSELLProfitSet)
+           {SecureSELLProfitSet=0;}
+        }
+
+     }
+  }
+//----------------------------------------------------------------------------
+
+//-------------------
+void CreateButton(string BTname,int Corner,int xDistance,int xSize,int yDistance,int ySize,color BGcolor,color Forecolor,string BTtext)
+  {
+   ObjectCreate(_Symbol,BTname,OBJ_BUTTON,0,0,0);
+   ObjectSetInteger(_Symbol,BTname,OBJPROP_CORNER,Corner);
+   ObjectSetInteger(_Symbol,BTname,OBJPROP_XDISTANCE,xDistance);
+   ObjectSetInteger(_Symbol,BTname,OBJPROP_XSIZE,xSize);
+   ObjectSetInteger(_Symbol,BTname,OBJPROP_YDISTANCE,yDistance);
+   ObjectSetInteger(_Symbol,BTname,OBJPROP_YSIZE,ySize);
+   ObjectSetInteger(_Symbol,BTname,OBJPROP_BGCOLOR,BGcolor);
+   ObjectSetInteger(_Symbol,BTname,OBJPROP_COLOR,Forecolor);
+   ObjectSetInteger(_Symbol,BTname,OBJPROP_STATE,false);
+   ObjectSetString(_Symbol,BTname,OBJPROP_TEXT,BTtext);
+   ObjectSetInteger(_Symbol,BTname,OBJPROP_HIDDEN,false);
+   ObjectSetInteger(_Symbol,BTname,OBJPROP_BACK,false);
+  }
+
+//--------------------------------
+void CreateButton2(string BTname,int Corner,int xDistance2,int xSize,int yDistance2,int ySize,color BGcolor,color Forecolor,string BTtext)
+  {
+   ObjectCreate(_Symbol,BTname,OBJ_BUTTON,0,0,0);
+   ObjectSetInteger(_Symbol,BTname,OBJPROP_CORNER,Corner);
+   ObjectSetInteger(_Symbol,BTname,OBJPROP_XDISTANCE,xDistance2+X_dist);
+   ObjectSetInteger(_Symbol,BTname,OBJPROP_XSIZE,xSize);
+   ObjectSetInteger(_Symbol,BTname,OBJPROP_YDISTANCE,yDistance2+Y_dist);
+   ObjectSetInteger(_Symbol,BTname,OBJPROP_YSIZE,ySize);
+   ObjectSetInteger(_Symbol,BTname,OBJPROP_BGCOLOR,BGcolor);
+   ObjectSetInteger(_Symbol,BTname,OBJPROP_COLOR,Forecolor);
+   ObjectSetInteger(_Symbol,BTname,OBJPROP_STATE,false);
+   ObjectSetString(_Symbol,BTname,OBJPROP_TEXT,BTtext);
+   ObjectSetInteger(_Symbol,BTname,OBJPROP_HIDDEN,false);
+   ObjectSetInteger(_Symbol,BTname,OBJPROP_BACK,false);
+  }
+//--//ispisivanje multichard profit displeja//--------------
+void SetLabel(string name, string text, color clr, int xdistance, int ydistance, int corner=4,int fontsize=11)
+  {
+   if(ObjectFind(name)==-1)
+     {
+      ObjectCreate(name, OBJ_LABEL, 0, 0,0);
+      ObjectSet(name, OBJPROP_XDISTANCE, xdistance-25);
+      ObjectSet(name, OBJPROP_YDISTANCE, ydistance);
+      ObjectSet(name, OBJPROP_CORNER, corner);
+     }
+   ObjectSetText(name, text, fontsize, "Arial", clr);
+
+  }
+//+--------------------------------------------------------------------------+
+void SetLabel2(string name, string text, color clr, int xdistance, int ydistance, int corner,int fontsize)
+  {
+   if(ObjectFind(name)==-1)
+     {
+      ObjectCreate(name, OBJ_LABEL, 0, 0,0);
+      ObjectSet(name, OBJPROP_XDISTANCE, xdistance-25);
+      ObjectSet(name, OBJPROP_YDISTANCE, ydistance);
+      ObjectSet(name, OBJPROP_CORNER, corner);
+     }
+   ObjectSetText(name, text, fontsize, "Arial", clr);
+
+  }
+//---------
+
+//----------------------
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+double SessionProfitC()
+  {
+
+// double returnValue;
+
+   double TotalProfitHistory,TotalLossHistory,TotalHistory;
+   double TotalProfitFloat,TotalLossFloat,TotalFloat;
+
+   for(Order=OrdersHistoryTotal(); Order>=0; Order--)
+     {
+      if(OrderSelect(Order,SELECT_BY_POS,MODE_HISTORY))
+         //{
+         //if(OrderOpenTime()>PlacingTime)
+        {
+         if(OrderSymbol()==Symbol() && OrderMagicNumber()==MagicNumber && OrderProfit()>0)
+           {
+            TotalProfitHistory=TotalProfitHistory+(OrderProfit()+OrderSwap()+OrderCommission());
+           }
+         if(OrderSymbol()==Symbol() && OrderMagicNumber()==MagicNumber && OrderProfit()<0)
+           {
+            TotalLossHistory=TotalLossHistory+(OrderProfit()+OrderSwap()+OrderCommission());
+           }
+        }
+      // }
+     }
+
+   TotalHistory=TotalProfitHistory+TotalLossHistory;
+
+   for(Order=OrdersTotal(); Order>=0; Order--)
+     {
+      if(OrderSelect(Order,SELECT_BY_POS,MODE_TRADES))
+        {
+         if(OrderSymbol()==Symbol() && OrderMagicNumber()==MagicNumber && OrderProfit()>0)
+           {
+            TotalProfitFloat=TotalProfitFloat+(OrderProfit()+OrderSwap()+OrderCommission());
+           }
+         if(OrderSymbol()==Symbol() && OrderMagicNumber()==MagicNumber && OrderProfit()<0)
+           {
+            TotalLossFloat=TotalLossFloat+(OrderProfit()+OrderSwap()+OrderCommission());
+           }
+        }
+     }
+
+   TotalFloat=TotalProfitFloat+TotalLossFloat;
+
+
+   returnValueC=TotalHistory+TotalFloat;
+   return(returnValueC);
+  }
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//| Funkcija za stvaranje labele                                     |
+//+------------------------------------------------------------------+
+void CreateLabel(string name, int corner, int x, int y, string text, int size, color text_color)
+  {
+   ObjectCreate(name, OBJ_LABEL, 0, 0, 0);
+   ObjectSetText(name, text, size, "Arial", text_color);
+   ObjectSet(name, OBJPROP_CORNER, corner);
+   ObjectSet(name, OBJPROP_XDISTANCE, x);
+   ObjectSet(name, OBJPROP_YDISTANCE, y);
+  }
+//----------
+//+------------------------------------------------------------------+
+//| Write Procedure                                                  |
+//+------------------------------------------------------------------+
+void Write1(string LBL1, int window, double side, int pos_x, int pos_y, string text, int fontsize, string fontname, color Tcolor=CLR_NONE)
+
+  {
+   ObjectCreate(LBL1, OBJ_LABEL, 0, 0, 0);
+// ObjectSet(LBL1, OBJPROP_FILL, Blue);
+   ObjectSet(LBL1, OBJPROP_CORNER, 4);
+   ObjectSet(LBL1, OBJPROP_XDISTANCE, pos_x+25);//+940
+   ObjectSet(LBL1, OBJPROP_YDISTANCE, pos_y+15);
+   ObjectSetText(LBL1,text, fontsize, fontname, Tcolor);
+
+   ObjectSetText(LBL1,text, fontsize, fontname, Tcolor);
+  }
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+void Write2(string LBL2, int corner, int pos_x, int pos_y, string text, int fontsize, string fontname, color Tcolor)
+
+  {
+   ObjectCreate(LBL2, OBJ_LABEL, 0, 0, 0);
+// ObjectSet(LBL1, OBJPROP_FILL, Blue);
+   ObjectSet(LBL2, OBJPROP_CORNER, corner);
+   ObjectSet(LBL2, OBJPROP_XDISTANCE, pos_x);//+940
+   ObjectSet(LBL2, OBJPROP_YDISTANCE, pos_y);
+   ObjectSetText(LBL2,text, fontsize, fontname, Tcolor);
+
+   ObjectSetText(LBL2,text, fontsize, fontname, Tcolor);
+  }
+//+------------------------------------------------------------------+
+void FrameLB(int FRcorner,int FRxD,int FRyD,int FRxS,int FRyS)
+  {
+//----------background color
+   ObjectCreate("pmk_FrameLabel1",OBJ_RECTANGLE_LABEL,0,0,0,0,0,0);
+   ObjectSet("pmk_FrameLabel1",OBJPROP_BGCOLOR,FrameColor);
+   ObjectSet("pmk_FrameLabel1",OBJPROP_CORNER,FRcorner);//4
+   ObjectSet("pmk_FrameLabel1",OBJPROP_BACK,false);//now it is in front of candles
+   ObjectSet("pmk_FrameLabel1",OBJPROP_XDISTANCE,FRxD);//130
+   ObjectSet("pmk_FrameLabel1",OBJPROP_YDISTANCE,FRyD);//40
+   ObjectSet("pmk_FrameLabel1",OBJPROP_XSIZE,1*FRxS);//320
+   ObjectSet("pmk_FrameLabel1",OBJPROP_YSIZE,1*FRyS);//260
+   ObjectSet("pmk_FrameLabel1",OBJPROP_BORDER_TYPE,3);
+   ObjectSet("pmk_FrameLabel1",OBJPROP_BORDER_COLOR,FrameColor);
+
+  }
+
+//+----------------------BAC LABEL FOR MANUAL ORDER BUTTON --------------------------------------------+
+void FrameLBS(int FRcorner,int FRxD,int FRyD,int FRxS,int FRyS)
+  {
+//----------background color
+   ObjectCreate("pmk_FrameLabel12",OBJ_RECTANGLE_LABEL,0,0,0,0,0,0);
+   ObjectSet("pmk_FrameLabel12",OBJPROP_BGCOLOR,FrameColor);
+   ObjectSet("pmk_FrameLabel12",OBJPROP_CORNER,FRcorner);//4
+   ObjectSet("pmk_FrameLabel12",OBJPROP_BACK,false);//now it is in front of candles
+   ObjectSet("pmk_FrameLabel12",OBJPROP_XDISTANCE,FRxD);//130
+   ObjectSet("pmk_FrameLabel12",OBJPROP_YDISTANCE,FRyD);//40
+   ObjectSet("pmk_FrameLabel12",OBJPROP_XSIZE,1*FRxS);//320
+   ObjectSet("pmk_FrameLabel12",OBJPROP_YSIZE,1*FRyS);//260
+   ObjectSet("pmk_FrameLabel12",OBJPROP_BORDER_TYPE,3);
+   ObjectSet("pmk_FrameLabel12",OBJPROP_BORDER_COLOR,FrameColor);
+
+  }
+
+//-----------------background label za multichard
+void FrameLB0(int FRcorner,int FRxD,int FRyD,int FRxS,int FRyS)
+  {
+//----------background color za multiframe label
+   ObjectCreate("pmk_FrameLabel",OBJ_RECTANGLE_LABEL,0,0,0,0,0,0);
+   ObjectSet("pmk_FrameLabel",OBJPROP_BGCOLOR,FrameColor);
+   ObjectSet("pmk_FrameLabel",OBJPROP_CORNER,FRcorner);//1
+   ObjectSet("pmk_FrameLabel",OBJPROP_BACK,false);//ispred candla i crta je sada ako je true onda su candle ispred labela
+   ObjectSet("pmk_FrameLabel",OBJPROP_XDISTANCE,FRxD);//105
+   ObjectSet("pmk_FrameLabel",OBJPROP_YDISTANCE,FRyD);//75
+   ObjectSet("pmk_FrameLabel",OBJPROP_XSIZE,1*FRxS);//70
+   ObjectSet("pmk_FrameLabel",OBJPROP_YSIZE,1*FRyS);//60
+   ObjectSet("pmk_FrameLabel",OBJPROP_BORDER_TYPE,3);
+   ObjectSet("pmk_FrameLabel",OBJPROP_BORDER_COLOR,FrameColor);
+
+  }
+
+//+------------------------------------------------------------------+
+//------------indicator profit multivhard
+
+//void Output_Row(int row, string sym)//original
+double Output_Row(int row, string sym)
+  {
+   if(ManualButtons==false&&MultichardDisplay==true)
+     {
+      SetLabel("objSymbol" + row, sym, Gray, 300+xdist, 25+ydist + (row + 1)*14);
+     }
+
+
+   double trades =0;
+   double lots = 0.00;
+   double opnl = 0.00;
+   double cpnl =0.00;
+   double clots = 0.00;
+   double ctrades = 0;
+   int pos = 1, lcolor = DimGray;
+   for(int i =0; i < OrdersTotal(); i++)
+     {
+      bool dummyResult5=    OrderSelect(i, SELECT_BY_POS, MODE_TRADES);
+      if((OrderMagicNumber() == MagicNumber || MagicNumber == -1) && OrderSymbol() == sym)
+        {
+         opnl += OrderProfit()+OrderCommission()+OrderSwap();
+         lots += OrderLots();
+         trades +=1;
+         if(OrderType() == OP_SELL)
+            pos = -1;
+        }
+     }
+   if(pos == 1)
+      lcolor = Lime;
+   if(pos ==-1)
+      lcolor = Red;
+   int clr = Lime;
+   if(opnl <0)
+      clr = Red;
+   if(ManualButtons==false&&MultichardDisplay==true)
+     {
+      SetLabel("objTrades" + row, DoubleToStr(trades,0), DimGray, 250+xdist, 25+ydist + (row + 1)*14);//xdist220
+      SetLabel("objLots" + row, DoubleToStr(lots,2), lcolor, 190+xdist, 25+ydist + (row + 1)*14);//xdist 170
+      // SetLabel("objOpenPnL" + row, DoubleToStr(opnl,2), clr, 100+xdist, 25+ydist + (row + 1)*14);
+      SetLabel("objFloat" + row, DoubleToStr(opnl,2), clr, 120+xdist, 25+ydist + (row + 1)*14);//x dist 110
+     }
+   for(i =0; i < OrdersHistoryTotal(); i++)
+     {
+      dummyResult5=OrderSelect(i, SELECT_BY_POS, MODE_HISTORY);
+      if((OrderMagicNumber() == MagicNumber || MagicNumber == -1) && OrderSymbol() == sym)
+        {
+         cpnl += OrderProfit()+OrderCommission()+OrderSwap();
+         clots += OrderLots();
+         ctrades +=1;
+        }
+     }
+// if (cpnl >=0) lcolor = Lime; else lcolor = Red;//original
+// SetLabel("objClosedPnL" + row, DoubleToStr(cpnl,2), lcolor, 50+xdist, 25+ydist + (row + 1)*14);//original
+
+   if(cpnl+opnl >=0)
+      lcolor = Lime;
+   else
+      lcolor = Red;
+   if(ManualButtons==false&&MultichardDisplay==true)
+     {
+      SetLabel("objClosedPnL" + row, DoubleToStr(cpnl+opnl,2), lcolor, 50+xdist, 25+ydist + (row + 1)*14);
+     }
+   tottrades += trades;
+   totlots += lots;
+   totopnl += opnl;
+   totcpnl += cpnl;
+
+//--
+   return(cpnl);
+  }
+
+//+------------------------------------------------------------------+
+
+
+
+
+
+
+//--------------------------
+void Assign_Symbols()
+  {
+   int i =0;
+   for(i =0; i < OrdersHistoryTotal(); i++)
+     {
+      bool dummyResult5= OrderSelect(i, SELECT_BY_POS, MODE_HISTORY);
+      if(OrderMagicNumber() == MagicNumber || MagicNumber == -1)
+        {
+         for(int k = 0; k<=20; k++)
+           {
+            if(OrderSymbol() == symbols[k])
+               break;
+            if(StringLen(symbols[k]) == 0)
+              {
+               symbols[k] = OrderSymbol();
+               break;
+              }
+           }
+        }
+     }
+
+   for(i=0; i<OrdersTotal(); i++)
+     {
+      dummyResult5=  OrderSelect(i, SELECT_BY_POS, MODE_TRADES);
+      if(OrderMagicNumber() == MagicNumber || MagicNumber == -1)
+        {
+         for(k = 0; k <=20; k++)
+           {
+            if(OrderSymbol() == symbols[k])
+               break;
+            if(StringLen(symbols[k]) == 0)
+              {
+               symbols[k] = OrderSymbol();
+               break;
+              }
+           }
+        }
+     }
+  }
+
+//+------------------------------------------------------------------+
+double Output_Row2(int row2, string sym2)
+  {
+
+// SetLabel("objSymbol" + row2, sym2, Gray, 300+xdist, 25+ydist + (row2 + 1)*14);//xdist 250
+   double trades2 =0;
+   double lots2 = 0.00;
+   double opnl2 = 0.00;
+   double cpnl2 =0.00;
+   double clots2 = 0.00;
+   double ctrades2 = 0;
+
+   for(int i2 =0; i2 < OrdersTotal(); i2++)
+     {
+      bool dummyResult52=    OrderSelect(i2, SELECT_BY_POS, MODE_TRADES);
+      if((OrderMagicNumber() == MagicNumber || MagicNumber == -1) && OrderSymbol() == sym2)
+        {
+         opnl2 += OrderProfit()+OrderCommission()+OrderSwap();
+         lots2 += OrderLots();
+         trades2 +=1;
+
+        }
+     }
+
+   for(i2 =0; i2 < OrdersHistoryTotal(); i2++)
+     {
+      dummyResult52=OrderSelect(i2, SELECT_BY_POS, MODE_HISTORY);
+      if((OrderMagicNumber() == MagicNumber || MagicNumber == -1) && OrderSymbol() == sym2)
+        {
+         cpnl2 += OrderProfit()+OrderCommission()+OrderSwap();
+         clots2 += OrderLots();
+         ctrades2 +=1;
+        }
+     }
+//SetLabel("objClosedPnL" + row2, DoubleToStr(cpnl2+opnl2,2), White, 50+xdist, 25+ydist + (row2 + 1)*14);
+   tottrades2 += trades2;
+   totlots2 += lots2;
+   totopnl2 += opnl2;
+   totcpnl2 += cpnl2;
+
+//--
+   return(cpnl2);
+  }
+
+//+------------------------------------------------------------------+
+//--------------------------
+void Assign_Symbols2()
+  {
+   int i2 =0;
+   for(i2 =0; i2 < OrdersHistoryTotal(); i2++)
+     {
+      bool dummyResult52= OrderSelect(i2, SELECT_BY_POS, MODE_HISTORY);
+      if(OrderMagicNumber() == MagicNumber || MagicNumber == -1)
+        {
+         for(int k2 = 0; k2<=20; k2++)
+           {
+            if(OrderSymbol() == symbols2[k2])
+               break;
+            if(StringLen(symbols2[k2]) == 0)
+              {
+               symbols2[k2] = OrderSymbol();
+               break;
+              }
+           }
+        }
+     }
+
+   for(i2=0; i2<OrdersTotal(); i2++)
+     {
+      dummyResult52=  OrderSelect(i2, SELECT_BY_POS, MODE_TRADES);
+      if(OrderMagicNumber() == MagicNumber || MagicNumber == -1)
+        {
+         for(k2 = 0; k2 <=20; k2++)
+           {
+            if(OrderSymbol() == symbols2[k2])
+               break;
+            if(StringLen(symbols2[k2]) == 0)
+              {
+               symbols2[k2] = OrderSymbol();
+               break;
+              }
+           }
+        }
+     }
+  }
+
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+void ExitAllTradesMultichard(color Color,string reason)
+  {
+   bool success;
+   for(int cnt=OrdersTotal(); cnt>=0; cnt --)
+     {
+      dummyResult=OrderSelect(cnt,SELECT_BY_POS,MODE_TRADES);
+      // if(OrderSymbol()==Symbol() && OrderMagicNumber()==MagicNumber)
+      if(OrderMagicNumber()==MagicNumber)
+        {
+         success=OrderClose(OrderTicket(),OrderLots(),OrderClosePrice(),Slippage,Color);
+         if(success==true)
+           {
+            Print("Closed all positions because ",reason);
+           }
+        }
+     }
+  }
+
+
+
+//---
+void PlaceBuyOrder()
+  {
+   double BuyOrders, Lots;
+   double LowestBuy = 1000, HighestBuy;
+
+   TickPrice = 0;
+
+   RefreshRates();
+
+   for(Order = OrdersTotal() - 1; Order >= 0; Order--)
+     {
+      if(OrderSelect(Order, SELECT_BY_POS, MODE_TRADES))
+        {
+         if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber && OrderType() == OP_BUY)
+           {
+            if(OrderOpenPrice() < LowestBuy)
+               LowestBuy = OrderOpenPrice();
+            if(OrderOpenPrice() > HighestBuy)
+               HighestBuy = OrderOpenPrice();
+            BuyOrders++;
+           }
+        }
+     }
+
+   if(Ask >= HighestBuy + (trendSpacing * Point))
+     {
+
+      if(Multiplier >0)
+         Lots = NormalizeDouble(((LotSize +LotIncrement)*Multiplier*BuyOrders),lotPrecision);
+      else
+         Lots = NormalizeDouble(LotSize + (LotIncrement * BuyOrders), lotPrecision);
+     }
+
+   if(Ask <= LowestBuy - (spacing * Point))
+     {
+
+      if(CounterTrendMultiplier >0)
+
+         Lots = NormalizeDouble(((LotSize +LotIncrement)*CounterTrendMultiplier*BuyOrders),lotPrecision);
+      else
+         Lots = NormalizeDouble(LotSize  + (LotIncrement * BuyOrders), lotPrecision);
+     }
+
+   if(BuyOrders==0)
+     {
+      Lots = NormalizeDouble(LotSize, lotPrecision);
+     }
+
+   if(Lots == 0)
+     {
+      if(Multiplier == 0)
+         Lots = NormalizeDouble(LotSize, lotPrecision);
+      else
+         Lots = NormalizeDouble(LotSize*Multiplier, lotPrecision);
+
+     }
+
+   if(IsTradeAllowed()==true&&BuyOrders<MaximumBuyOrders)
+     {
+      dummyResult=OrderSend(Symbol(), OP_BUY, Lots, Ask, Slippage, 0, 0, TradeComment, MagicNumber, Green);
+     }
+
+   Error = GetLastError();
+   if(Error != 0)
+      Write("Error opening BUY order: " + ErrorDescription(Error) + " (C" + Error + ")  Ask:" + Ask + "  Slippage:" + Slippage);
+   else
+     {
+      TickPrice = Close[0];
+     }
+
+  }
+//-----
+//----
+void PlaceSellOrder()
+  {
+   double SellOrders, Lots;
+   double HighestSell, LowestSell = 1000;
+
+   TickPrice = 0;
+
+   RefreshRates();
+
+   for(Order = OrdersTotal() - 1; Order >= 0; Order--)
+     {
+      if(OrderSelect(Order, SELECT_BY_POS, MODE_TRADES))
+        {
+         if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber && OrderType() == OP_SELL)
+           {
+            if(OrderOpenPrice() > HighestSell)
+               HighestSell = OrderOpenPrice();
+            if(OrderOpenPrice() < LowestSell)
+               LowestSell = OrderOpenPrice();
+            SellOrders++;
+           }
+        }
+     }
+
+   if(Bid <= LowestSell - (trendSpacing * Point))
+     {
+
+      if(Multiplier > 0)
+         Lots = NormalizeDouble(((LotSize +LotIncrement)*Multiplier*SellOrders),lotPrecision);
+      else
+         Lots = NormalizeDouble(LotSize + (LotIncrement * SellOrders), lotPrecision);
+     }
+
+   if(Bid >= HighestSell + (spacing * Point))
+     {
+      if(CounterTrendMultiplier >0)
+         Lots = NormalizeDouble(((LotSize +LotIncrement)*CounterTrendMultiplier*SellOrders),lotPrecision);
+      else
+         Lots = NormalizeDouble(LotSize  + (LotIncrement * SellOrders), lotPrecision);
+     }
+
+   if(SellOrders==0)
+     {
+      Lots = NormalizeDouble(LotSize, lotPrecision);
+     }
+
+   if(Lots == 0)
+     {
+      if(Multiplier ==0)
+         Lots = NormalizeDouble(LotSize, lotPrecision);
+      else
+         Lots = NormalizeDouble(LotSize*Multiplier, lotPrecision);
+     }
+
+   if(IsTradeAllowed()==true&&SellOrders<MaximumSellOrders)
+     {
+      dummyResult=OrderSend(Symbol(), OP_SELL, Lots, Bid, Slippage, 0, 0, TradeComment, MagicNumber, Red);
+     }
+
+   Error = GetLastError();
+   if(Error != 0)
+      Write("Error opening SELL order: " + ErrorDescription(Error) + " (D" + Error + ")  Bid:" + Bid + "  Slippage:" + Slippage);
+   else
+     {
+      TickPrice = Close[0];
+     }
+  }
+  
+
+//+------------------------------------------------------------------+
+//-----------------------------------------------------------------------------
+// Market Analysis Functions
+//-----------------------------------------------------------------------------
+
+// Funkcija za primjenu trailing stopa na sve naloge s prilagodbom prema broju naloga
+void CheckAndApplyTrailingStop() {
+    // Brojanje naloga s vašim Magic Number-om
+    int totalActiveOrders = 0;
+    for(int count=0; count<OrdersTotal(); count++) {
+        if(OrderSelect(count, SELECT_BY_POS, MODE_TRADES)) {
+            if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber) {
+                totalActiveOrders++;
+            }
+        }
+    }
+    
+    // Izračun faktora skaliranja - linearno između 1 i 10 za raspon od 1 do 100 naloga
+    double scaleFactor = 1.0;
+    if(totalActiveOrders > 1) {
+        // Linearno skaliranje između 1 i 10 bazirano na broju naloga od 1 do 100
+        scaleFactor = 1.0 + (totalActiveOrders - 1) * 9.0 / 99.0;
+        // Ograničenje na maksimalno 10x za više od 100 naloga
+        if(scaleFactor > 10.0) scaleFactor = 10.0;
+    }
+    
+    // Prilagođeni trailing stop i step
+    int adjustedTrailingStop = (int)(TrailingStop * scaleFactor);
+    int adjustedTrailingStep = (int)(TrailingStep * scaleFactor);
+    
+    // Primjena na sve naloge
+    for(int i=0; i<OrdersTotal(); i++) {
+        if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
+            if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber) {
+                // Za BUY naloge
+                if(OrderType() == OP_BUY) {
+                    // Izračunaj potencijalnu novu SL cijenu s prilagođenim stop-om
+                    double newStopLoss = NormalizeDouble(Bid - adjustedTrailingStop * Point, Digits);
+                    
+                    // Ako je cijena porasla dovoljno da se isplati pomaknuti SL
+                    if(newStopLoss > OrderStopLoss() + adjustedTrailingStep * Point || OrderStopLoss() == 0) {
+                        // Modifikacija naloga s novim SL
+                        bool modified = OrderModify(OrderTicket(), OrderOpenPrice(), newStopLoss, OrderTakeProfit(), 0, Blue);
+                      /*  if(modified) {
+                            Print("Trailing Stop za BUY nalog #", OrderTicket(), " pomaknut na ", newStopLoss, 
+                                  " (Scale Factor: ", scaleFactor, ", Orders: ", totalActiveOrders, ")");
+                        } else {
+                            Print("Greška pri pomicanju trailinga za BUY #", OrderTicket(), ": ", GetLastError());
+                        }
+                       */ 
+                    }
+                }
+                // Za SELL naloge
+                else if(OrderType() == OP_SELL) {
+                    // Izračunaj potencijalnu novu SL cijenu s prilagođenim stop-om
+                     newStopLoss = NormalizeDouble(Ask + adjustedTrailingStop * Point, Digits);
+                    
+                    // Ako je cijena pala dovoljno da se isplati pomaknuti SL
+                    if(newStopLoss < OrderStopLoss() - adjustedTrailingStep * Point || OrderStopLoss() == 0) {
+                        // Modifikacija naloga s novim SL
+                        modified = OrderModify(OrderTicket(), OrderOpenPrice(), newStopLoss, OrderTakeProfit(), 0, Red);
+                      /*  if(modified) {
+                            Print("Trailing Stop za SELL nalog #", OrderTicket(), " pomaknut na ", newStopLoss,
+                                  " (Scale Factor: ", scaleFactor, ", Orders: ", totalActiveOrders, ")");
+                        } else {
+                            Print("Greška pri pomicanju trailinga za SELL #", OrderTicket(), ": ", GetLastError());
+                        }
+                       */ 
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+
+// Dodajte ovu funkciju za izračun vremena do kraja ograničenja
+int GetMinutesUntilRestrictionEnd()
+{
+   datetime currentTime = TimeCurrent();
+   int currentHour = TimeHour(currentTime);
+   int currentMinute = TimeMinute(currentTime);
+   
+   int currentTimeMinutes = currentHour * 60 + currentMinute;
+   int endTimeMinutes = RestrictEndHour * 60 + RestrictEndMinute;
+   
+   // Ako je vrijeme ograničenja preko ponoći (npr. 18:00 do 06:00)
+   if(RestrictStartHour > RestrictEndHour) {
+      if(currentTimeMinutes >= 0 && currentTimeMinutes <= endTimeMinutes) {
+         return endTimeMinutes - currentTimeMinutes;
+      } else {
+         return (24 * 60 - currentTimeMinutes) + endTimeMinutes;
+      }
+   }
+   // Ako je vrijeme ograničenja unutar istog dana (npr. 09:00 do 17:00)
+   else {
+      return endTimeMinutes - currentTimeMinutes;
+   }
+}
+
+// Dodajte ovu funkciju za prikaz/skrivanje poruke o ograničenju
+void ManageTimeRestrictionDisplay(bool isRestricted, bool hasOpenOrders)
+{
+   if(isRestricted) {
+      if(!isTimeRestrictionDisplayed) {
+         // Stvori labele ako ne postoje
+         if(ObjectFind(timeRestrictionLabel) < 0) {
+            ObjectCreate(timeRestrictionLabel, OBJ_LABEL, 0, 0, 0);
+            ObjectSet(timeRestrictionLabel, OBJPROP_CORNER, TimeRestrictionCorner);
+            ObjectSet(timeRestrictionLabel, OBJPROP_XDISTANCE, 20);
+            ObjectSet(timeRestrictionLabel, OBJPROP_YDISTANCE, 100);
+         }
+         
+         if(ObjectFind(countdownLabel) < 0) {
+            ObjectCreate(countdownLabel, OBJ_LABEL, 0, 0, 0);
+            ObjectSet(countdownLabel, OBJPROP_CORNER, TimeRestrictionCorner);
+            ObjectSet(countdownLabel, OBJPROP_XDISTANCE, 20);
+            ObjectSet(countdownLabel, OBJPROP_YDISTANCE, 120);
+         }
+         
+         isTimeRestrictionDisplayed = true;
+      }
+      
+      // Postavi tekst poruke
+      string statusText;
+      if(hasOpenOrders) {
+         statusText = "Time restriction: Waiting closing open trade";
+      } else {
+         statusText = "Time restriction: No Trade";
+      }
+      ObjectSetText(timeRestrictionLabel, statusText, TimeRestrictionFontSize, "Arial", TimeRestrictionTextColor);
+      
+      // Izračunaj i prikaži vrijeme do kraja ograničenja
+      int minutesLeft = GetMinutesUntilRestrictionEnd();
+      int hoursLeft = (int)MathFloor(minutesLeft / 60);
+      int minsLeft = minutesLeft % 60;
+      
+      string countdownText = "Remeining time: " + hoursLeft + "h " + minsLeft + "m";
+      ObjectSetText(countdownLabel, countdownText, TimeRestrictionFontSize, "Arial", TimeRestrictionTextColor);
+      
+      // Osvježi prikaz
+      WindowRedraw();
+   } else {
+      // Ukloni labele ako postoje
+      if(isTimeRestrictionDisplayed) {
+         ObjectDelete(timeRestrictionLabel);
+         ObjectDelete(countdownLabel);
+         isTimeRestrictionDisplayed = false;
+         WindowRedraw();
+      }
+   }
+}
+
+// Dodajte ovu funkciju negdje u EA
+bool HasOpenOrders()
+{
+   int totalOrders = 0;
+   for(int i=0; i<OrdersTotal(); i++) {
+      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
+         if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber) {
+            if(OrderType() == OP_BUY || OrderType() == OP_SELL) {
+               totalOrders++;
+            }
+         }
+      }
+   }
+   return (totalOrders > 0);
+}
+
+// Dodajte ovu funkciju negdje u EA
+bool IsTimeRestricted()
+{
+   if(!UseTimeRestriction) return false;
+   
+   datetime currentTime = TimeCurrent();
+   int currentHour = TimeHour(currentTime);//original
+   
+   int currentMinute = TimeMinute(currentTime);
+   
+   int currentTimeMinutes = currentHour * 60 + currentMinute;
+   int startTimeMinutes = RestrictStartHour * 60 + RestrictStartMinute;//dodano -3 na RestrictStartHours
+   int endTimeMinutes = RestrictEndHour * 60 + RestrictEndMinute;//dodano -3 na RestrictEndHours
+   
+   // Ako je vrijeme ograničenja preko ponoći (npr. 18:00 do 06:00)
+   if(startTimeMinutes > endTimeMinutes) {
+      return (currentTimeMinutes >= startTimeMinutes || currentTimeMinutes <= endTimeMinutes);
+   }
+   // Ako je vrijeme ograničenja unutar istog dana (npr. 09:00 do 17:00)
+   else {
+      return (currentTimeMinutes >= startTimeMinutes && currentTimeMinutes <= endTimeMinutes);
+   }
+}
+
+
+
+//---------------
+// Nova funkcija za forsiranje inicijalnih naloga nakon zatvaranja svih pozicija
+void ForceInitialOrderPlacement() {
+    bool allowPendingBuy = true;
+    bool allowPendingSell = true;
+    int pendingSellOrder, pendingBuyOrder;
+    
+    // Provjera ograničenja
+    if (!TradeLong || SessionTargetStop || StopMinEquity || SpreadStop) {
+        allowPendingBuy = false;
+    }
+    if (!TradeShort || SessionTargetStop || StopMinEquity || SpreadStop) {
+        allowPendingSell = false;
+    }
+    
+    // Postavi inicijalne pending naloge
+    if(allowPendingSell) {
+        pendingSellOrder = OrderSend(Symbol(), OP_SELLSTOP, PendingLots, Bid - PendingSpacing * Point, 3, 0, 0, "New Cycle", MagicNumber, 0, Red);
+        if(pendingSellOrder <= 0) {
+         //   Print("Error adding initial SELLSTOP after cycle: ", GetLastError());
+        }
+    }
+    
+    if(allowPendingBuy) {
+        pendingBuyOrder = OrderSend(Symbol(), OP_BUYSTOP, PendingLots, Ask + PendingSpacing * Point, 3, 0, 0, "New Cycle", MagicNumber, 0, Blue);
+        if(pendingBuyOrder <= 0) {
+          //  Print("Error adding initial BUYSTOP after cycle: ", GetLastError());
+        }
+    }
+    
+    initialOrdersPlaced = true;
+   // Print("New trading cycle initialized with fresh pending orders");
+}
+
+
+
+// Funkcija za provjeru je li tržište u "sideways" stanju
+bool IsSidewaysMarket() {
+    // Ako je filter isključen, uvijek vrati false (kao da nije sideways)
+    if(!EnableRangeFilter) return false;
+    
+    // Ažuriranje range vrijednosti svakih 10 minuta
+    if(TimeCurrent() - lastRangeUpdate > 600 || rangeHigh == 0 || rangeLow == 0) {
+        CalculateRange();
+        lastRangeUpdate = TimeCurrent();
+    }
+    
+    // Trenutna cijena
+    double currentPrice = (Ask + Bid) / 2;
+    
+    // Provjeri je li cijena unutar raspona
+    bool insideRange = (currentPrice >= rangeLow && currentPrice <= rangeHigh);
+    
+    return insideRange;
+}
+
+// Funkcija za izračun range vrijednosti
+void CalculateRange() {
+    double highestHigh = 0;
+    double lowestLow = 100000;
+    
+    // Pronađi najvišu i najnižu cijenu u zadnjih 24 bara na RangeTimeFrame
+   // for(int i = 0; i < 24; i++) {
+     for(int i = 0; i < 10; i++) {
+    
+        double high = iHigh(Symbol(), RangeTimeFrame, i);
+        double low = iLow(Symbol(), RangeTimeFrame, i);
+        
+        if(high > highestHigh) highestHigh = high;
+        if(low < lowestLow) lowestLow = low;
+    }
+    
+    // Ako je stvarni raspon veći od definiranog, prilagodi ga
+    double actualRange = highestHigh - lowestLow;
+    double requiredRange = Range * Point * 10; // Pretvaranje pipsa u cijenu (10 = 1 pip za 5-znamenkaste brokere)
+    
+    if(actualRange <= requiredRange) {
+        // Ako je stvarni raspon manji ili jednak traženom, koristi ga
+        rangeHigh = highestHigh;
+        rangeLow = lowestLow;
+    } else {
+        // Ako je stvarni raspon veći, centiramo ga oko trenutne cijene
+        double currentPrice = (Ask + Bid) / 2;
+        rangeHigh = currentPrice + (requiredRange / 2);
+        rangeLow = currentPrice - (requiredRange / 2);
+    }
+    
+    // Debug info
+    if(EnableRangeFilter) {
+        Print("Range izračunat: Low=", rangeLow, " High=", rangeHigh, " (", (rangeHigh-rangeLow)/(Point*10), " pipsa)");
+    }
+}
+
+// Funkcija za crtanje Range zone na grafikonu
+void DrawRangeZone() {
+    if(!EnableRangeFilter) return;
+    
+    // Obriši stare linije
+    ObjectDelete("RangeHigh");
+    ObjectDelete("RangeLow");
+    ObjectDelete("RangeText");
+    
+    // Nacrtaj gornju granicu
+    ObjectCreate("RangeHigh", OBJ_HLINE, 0, 0, rangeHigh);
+    ObjectSet("RangeHigh", OBJPROP_COLOR, clrOrange);
+    ObjectSet("RangeHigh", OBJPROP_STYLE, STYLE_DASH);
+    
+    // Nacrtaj donju granicu
+    ObjectCreate("RangeLow", OBJ_HLINE, 0, 0, rangeLow);
+    ObjectSet("RangeLow", OBJPROP_COLOR, clrOrange);
+    ObjectSet("RangeLow", OBJPROP_STYLE, STYLE_DASH);
+    
+    // Dodaj tekst
+    ObjectCreate("RangeText", OBJ_TEXT, 0, Time[0], rangeHigh);
+    ObjectSetText("RangeText", "Sideways zone: " + DoubleToStr((rangeHigh-rangeLow)/(Point*10), 1) + " pips", 8, "Arial", clrOrange);
+}
+//---------------
+// Dodajte ovu funkciju prije switch bloka
+void CheckAndApplyTrailingProfit() {
+    if(!UseTrailingProfit) return; // Ako nije uključen, izađi iz funkcije
+    
+     currentProfit = BuyProfit2 + SellProfit2;
+    
+    // Ako je trenutni profit veći od dosadašnjeg maksimuma, ažuriraj
+    if(currentProfit > GlobalMaxProfit) {
+        GlobalMaxProfit = currentProfit;
+        
+        // Postavi novu razinu trailing profita
+        // Zaokruži na niži višekratnik koraka
+        TrailingProfitLevel = MathFloor(GlobalMaxProfit / (TrailingProfitStep * Point)) * TrailingProfitStep * Point;
+        
+        // Debug ispis ako je potrebno
+         Print("Nova razina trailing profita: ", TrailingProfitLevel);
+    }
+    
+    // Ako je profit pao ispod trailing razine, zatvori sve naloge
+    if(currentProfit < TrailingProfitLevel && TrailingProfitLevel > 0) {
+       Print("Trailing profit aktiviran na razini: ", TrailingProfitLevel, ", trenutni profit: ", currentProfit);
+        
+        // Zatvori sve aktivne naloge
+        CloseOrdersOptimizedByProfit();
+        ClosePendingBuyStop();
+        ClosePendingSellStop();
+        
+        // Reset nakon zatvaranja
+        GlobalMaxProfit = 0;
+        TrailingProfitLevel = 0;
+        
+        // Dodatni reset varijabli kao kod dostizanja profit targeta
+       static bool singleOrderClosed = false;
+        lastOrderType = -1;
+        initialOrdersPlaced = false;
+      static double  lastBuyPrice = 0;
+      static double  lastSellPrice = 0;
+    }
+} 
+    
